@@ -14,7 +14,7 @@ LLaRA++: Beyond Language Modeling — Hybrid Embedding and User-Aware Curriculum
 | Member D         | CI/CD, pipeline integration, dashboard                |  |
 
 ## System diagram
-(See diagram in the repository `/docs/architecture.png` — this includes the MPD input → LightGCN & BERT/DistilBERT → SR2LLM → LLaRA + curriculum prompt tuning → quantized ONNX model → API server → evaluation dashboard.)
+(See diagram in the repository `main/system_diagram.png` — this includes the MPD input → LightGCN & BERT/DistilBERT → SR2LLM → LLaRA + curriculum prompt tuning → quantized ONNX model → API server → evaluation dashboard.)
 
 ## Summary of outside materials
 | Dataset / Model                         | How it was created                                            | Conditions of use |
