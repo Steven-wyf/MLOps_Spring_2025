@@ -24,13 +24,17 @@ LLaRA++: Beyond Language Modeling — Hybrid Embedding and User-Aware Curriculum
 | LightGCN Enhanced (from paper)         | Constructed from playlist-track-user graph                   | Public research use         |
 | LLaRA code from SIGIR ’24 paper        | Hybrid prompt & curriculum tuning idea                       | MIT License on GitHub       |
 
-## Summary of infrastructure requirements
-| Requirement     | How many/when                                     | Justification                         |
-|-----------------|---------------------------------------------------|--------------------------------------|
-| `m1.medium` VMs | 3 throughout the project                          | LightGCN & data preprocessing        |
-| `gpu_mi100`     | 4-hour block 2x per week                          | Training LLaRA model + tuning        |
-| Floating IPs    | 1 always-on + 1 temporary                         | API serving + dashboard staging      |
-| Persistent Disk | 100GB for data, embeddings, and logs             | Reuse across stages, tracked volume  |
+## Summary of Infrastructure Requirements
+
+| Requirement       | How Many / When                                      | Justification                                                                 |
+|-------------------|------------------------------------------------------|-------------------------------------------------------------------------------|
+| `m1.medium` VMs   | 3 VMs for the entire project duration                | For running lightweight services including data preprocessing, genre tagging, and API server components. |
+| `gpu_mi100`       | 4-hour blocks, twice per week (total ~32 hours)     | Required for training LLaRA with LoRA adapters, tuning LightGCN embeddings, and running curriculum-based prompt tuning. |
+| Floating IPs      | 1 persistent, 1 temporary during staging deployments | Persistent IP for stable API endpoint access; a second IP for temporary staging/canary testing. |
+| Persistent Storage| 100GB volume attached for the full project duration | To store datasets, training artifacts, model checkpoints, ONNX binaries, and streaming logs across pipelines. |
+| Ray Cluster       | Dynamically scaled during training & evaluation     | Used for scheduling training jobs and distributed hyperparameter tuning (Ray Tune). |
+| MLflow Server     | 1 containerized instance                             | Required for tracking experiments and managing model metadata during development. |
+
 
 ## Detailed design plan
 
