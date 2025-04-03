@@ -107,6 +107,8 @@ The dataset describes the content of each playlists, which imply relationships b
 - Use **LoRA** for efficient fine-tuning
 - Track experiments with **MLflow**
 
+The proposed design integrates collaborative filtering and textual embeddings to enhance music recommendation. It first employs LightGCN to model user-item interaction graphs, capturing behavioral patterns in sequence embeddings. Textual metadata—including titles, artists, and lyrics—are embedded via DistilBERT or BERT, enriching item representations with semantic depth. A multilayer perceptron (MLP) projector (SR2LLM) is trained to map these LightGCN behavioral embeddings into the LLM embedding space. The core recommendation model, LLaRA, is initially fine-tuned using text-only prompting and subsequently refined through curriculum prompt tuning, gradually incorporating behavioral embeddings. Efficient model updates are achieved via LoRA fine-tuning. Finally, MLflow is utilized for comprehensive experiment tracking and reproducibility.
+
 ### Model serving and monitoring platforms
 - Quantize final LLaRA model using **ONNX + QInt8**【40†LLM Quantization】
 - Serve with **FastAPI** with support for batching
