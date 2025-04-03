@@ -19,10 +19,10 @@ LLaRA++ is a cold-start music recommendation system that unifies graph-based col
 ## Summary of outside materials
 | Dataset / Model                         | How it was created                                            | Conditions of use |
 |----------------------------------------|----------------------------------------------------------------|-------------------|
-| Million Playlist Dataset (MPD)         | Collected from US Spotify users 2010–2017, 1M playlists        | Research only, under AIcrowd challenge license 【44†license.txt】|
-| DistilBERT / BERT                      | Pretrained on Wikipedia + BookCorpus                         | Open under Apache 2.0       |
-| LightGCN Enhanced (from paper)         | Constructed from playlist-track-user graph                   | Public research use         |
-| LLaRA code from SIGIR ’24 paper        | Hybrid prompt & curriculum tuning idea                       | MIT License on GitHub       |
+| [Million Playlist Dataset (MPD)](https://www.aicrowd.com/challenges/spotify-million-playlist-dataset-challenge)         | Collected from US Spotify users 2010–2017, 1M playlists        | Research only, under AIcrowd challenge license|
+| [DistilBERT / BERT](https://github.com/Steven-wyf/MLOps_Spring_2025/blob/main/bert-powered%20book%20genre%20classfication.pdf)                      | Pretrained on Wikipedia + BookCorpus                         | Open under Apache 2.0       |
+| [LightGCN Enhanced (from paper)](https://github.com/Steven-wyf/MLOps_Spring_2025/blob/main/Embedding%20Enhancement%20Method%20for%20LightGCN%20in%20Recommendation%20Information%20Systems.pdf)       | Constructed from playlist-track-user graph                   | Public research use         |
+| [LLaRA code from SIGIR ’24 paper](https://github.com/Steven-wyf/MLOps_Spring_2025/blob/main/llara.pdf)      | Hybrid prompt & curriculum tuning idea                       | MIT License on GitHub       |
 
 ## Summary of Infrastructure Requirements
 
