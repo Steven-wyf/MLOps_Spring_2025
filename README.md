@@ -1,8 +1,8 @@
 # MLOps_Spring_2025
 # Project Proposal: LLaRA++ — A cold-start music recommendation system that integrates behavior and text
 
-## Title of project
-LLaRA++: Beyond Language Modeling — Hybrid Embedding and User-Aware Curriculum for Cold-Start Music Recommendation
+## LLaRA++: Beyond Language Modeling — Hybrid Embedding and User-Aware Curriculum for Cold-Start Music Recommendation
+
 
 ## Contributors
 | Name             | Responsible for                                      | Link to their commits in this repo             |
