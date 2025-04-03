@@ -23,7 +23,67 @@ LLaRA++ is a cold-start music recommendation system that unifies graph-based col
 | [DistilBERT / BERT](https://github.com/Steven-wyf/MLOps_Spring_2025/blob/main/bert-powered%20book%20genre%20classfication.pdf)                      | Pretrained on Wikipedia + BookCorpus                         | Open under Apache 2.0       |
 | [LightGCN Enhanced (from paper)](https://github.com/Steven-wyf/MLOps_Spring_2025/blob/main/Embedding%20Enhancement%20Method%20for%20LightGCN%20in%20Recommendation%20Information%20Systems.pdf)       | Constructed from playlist-track-user graph                   | Public research use         |
 | [LLaRA code from SIGIR ’24 paper](https://github.com/Steven-wyf/MLOps_Spring_2025/blob/main/llara.pdf)      | Hybrid prompt & curriculum tuning idea                       | MIT License on GitHub       |
+The Million Playlist Dataset(MPD) contains 1,000,000 Playlists. The playlists contain over 2 million unique tracks by 300,00 artists. 
+Each data entry is formatted as followed:
+```json
+{
+        "name": "musical",
+        "collaborative": "false",
+        "pid": 5,
+        "modified_at": 1493424000,
+        "num_albums": 7,
+        "num_tracks": 12,
+        "num_followers": 1,
+        "num_edits": 2,
+        "duration_ms": 2657366,
+        "num_artists": 6,
+        "tracks": [
+            {
+                "pos": 0,
+                "artist_name": "Degiheugi",
+                "track_uri": "spotify:track:7vqa3sDmtEaVJ2gcvxtRID",
+                "artist_uri": "spotify:artist:3V2paBXEoZIAhfZRJmo2jL",
+                "track_name": "Finalement",
+                "album_uri": "spotify:album:2KrRMJ9z7Xjoz1Az4O6UML",
+                "duration_ms": 166264,
+                "album_name": "Dancing Chords and Fireflies"
+            },
+            {
+                "pos": 1,
+                "artist_name": "Degiheugi",
+                "track_uri": "spotify:track:23EOmJivOZ88WJPUbIPjh6",
+                "artist_uri": "spotify:artist:3V2paBXEoZIAhfZRJmo2jL",
+                "track_name": "Betty",
+                "album_uri": "spotify:album:3lUSlvjUoHNA8IkNTqURqd",
+                "duration_ms": 235534,
+                "album_name": "Endless Smile"
+            },
+            {
+                "pos": 2,
+                "artist_name": "Degiheugi",
+                "track_uri": "spotify:track:1vaffTCJxkyqeJY7zF9a55",
+                "artist_uri": "spotify:artist:3V2paBXEoZIAhfZRJmo2jL",
+                "track_name": "Some Beat in My Head",
+                "album_uri": "spotify:album:2KrRMJ9z7Xjoz1Az4O6UML",
+                "duration_ms": 268050,
+                "album_name": "Dancing Chords and Fireflies"
+            },
+            // 8 tracks omitted
+            {
+                "pos": 11,
+                "artist_name": "Mo' Horizons",
+                "track_uri": "spotify:track:7iwx00eBzeSSSy6xfESyWN",
+                "artist_uri": "spotify:artist:3tuX54dqgS8LsGUvNzgrpP",
+                "track_name": "Fever 99\u00b0",
+                "album_uri": "spotify:album:2Fg1t2tyOSGWkVYHlFfXVf",
+                "duration_ms": 364320,
+                "album_name": "Come Touch The Sun"
+            }
+        ],
 
+    }
+```
+The dataset describes the content of each playlists, which imply relationships between users and tracks.
 ## Summary of Infrastructure Requirements
 
 | Requirement       | How Many / When                                      | Justification                                                                 |
