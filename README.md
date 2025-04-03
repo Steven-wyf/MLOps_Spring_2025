@@ -10,7 +10,7 @@ LLaRA++: Beyond Language Modeling — Hybrid Embedding and User-Aware Curriculum
 | All team members | Overall system design, integration, and documentation |       |
 | Member A         | Model training (LightGCN, Projector, LLaRA)           |  |
 | Member B         | Model quantization, FastAPI deployment & monitoring   |  |
-| Member C         | Data preprocessing, lyric/title embedding, cold start |  |
+| Yufei Wang         | Data preprocessing, lyric/title embedding, cold start |  |
 | Member D         | CI/CD, pipeline integration, dashboard                |  |
 
 ## System diagram
