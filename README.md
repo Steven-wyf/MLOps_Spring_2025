@@ -114,6 +114,7 @@ The proposed design integrates collaborative filtering and textual embeddings to
 - Log latency and throughput metrics
 - Set up 3 deployment stages: staging, canary, production
 - Model performance evaluation
+
   By converting the trained LLaRA model to ONNX format and applying QInt8 quantization, we transform high-precision floating-point parameters into 8-bit integers. This could significantly reduces the model size and computational requirements. The process not only accelerates inference but also maintains robust performance in resource-constrained environments while keeping accuracy loss within acceptable limits.
   
   The we deploy the inference service with FastAPI, which leverages its high performance and asynchronous capabilities. while the batching mechanism consolidates multiple requests into a single model call, it could greatly enhance throughput and response efficiency. This step ensures that the system handles high concurrency effectively and delivers accurate inference results, laying a solid foundation for subsequent monitoring and logging.
