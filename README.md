@@ -23,6 +23,7 @@ LLaRA++ is a cold-start music recommendation system that unifies graph-based col
 | [DistilBERT / BERT](https://github.com/Steven-wyf/MLOps_Spring_2025/blob/main/bert-powered%20book%20genre%20classfication.pdf)                      | Pretrained on Wikipedia + BookCorpus                         | Open under Apache 2.0       |
 | [LightGCN Enhanced (from paper)](https://github.com/Steven-wyf/MLOps_Spring_2025/blob/main/Embedding%20Enhancement%20Method%20for%20LightGCN%20in%20Recommendation%20Information%20Systems.pdf)       | Constructed from playlist-track-user graph                   | Public research use         |
 | [LLaRA code from SIGIR ’24 paper](https://github.com/Steven-wyf/MLOps_Spring_2025/blob/main/llara.pdf)      | Hybrid prompt & curriculum tuning idea                       | MIT License on GitHub       |
+
 The Million Playlist Dataset(MPD) contains 1,000,000 Playlists. The playlists contain over 2 million unique tracks by 300,00 artists. 
 Each data entry is formatted as followed:
 ```json
