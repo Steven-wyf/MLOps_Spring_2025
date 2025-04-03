@@ -126,11 +126,33 @@ The last step of model serving is that we need to divide the deployment process 
 In the model evaluation stage, we employ both offline testing and online monitoring to comprehensively assess the overall performance of the model. Offline evaluation is conducted on historical test datasets by calculating metrics such as accuracy, recall, and F1 score to gauge performance on static data. Online evaluation, on the other hand, monitors real-world performance through A/B testing, real-time user feedback, click-through rate (CTR), and conversion rate metrics. The evaluation results help determine whether the new model meets the desired performance standards, identify potential issues early, and provide data-driven insights for continuous iteration and improvement. These insights are fed back into the training pipeline, creating a continuous improvement loop for the model.
 
 ### Data pipeline
-- Use Python scripts to extract playlist → seed tracks → target for next-track prediction
-- Lyrics/title embedding and genre classification for cold start
-- Streaming simulation for inference testing
-- Persistent volume stores track embeddings, models, test logs
-- Preprocessing scripts + evaluation pipeline containerized
+Data Pipeline
+1. Data Ingestion
+    - Online Inputs & Offline Playlists:
+        - The pipeline accepts data in real-time from user inputs as well as batch data from an offline playlists dataset.
+    - Script-Based Extraction:
+        - Python scripts are used to extract essential components from playlists, such as seed tracks and their corresponding next-track labels.
+2. ETL (Extract, Transform, Load)
+   - Extraction:
+        - Raw data is gathered from both online and offline sources.
+    - Transformation:
+        - The data undergoes cleansing to remove duplicates and handle missing values.
+        - Data is standardized into consistent formats, ensuring that seed tracks and target labels are correctly structured for downstream processing.
+    - Loading:
+        - The transformed data is loaded into intermediate storage, making it readily accessible for subsequent stages.
+3. Feature Extraction
+    - Text Embeddings:
+        - Song lyrics and titles are processed to generate embeddings that capture semantic relationships and contextual information.
+    - Genre Classification:
+        - Tracks are classified into genres to enrich metadata, which is particularly beneficial during cold start scenarios where historical data is sparse.
+    - Track Embeddings:
+        - Numerical representations (embeddings) of tracks are computed to serve as key features for the next-track prediction model.
+4. Dataset Versioning
+    - Version Control:
+        - Processed datasets are versioned using tools like DVC or Git LFS. This enables reproducibility and tracking of all data transformations.
+    - Traceability:
+        - Each dataset version is annotated with metadata that details the transformation steps, aiding in debugging and model iteration.
+
 
 ### Continuous X
 - Use **Terraform/Helm** to define infrastructure
