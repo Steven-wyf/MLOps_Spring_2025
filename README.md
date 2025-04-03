@@ -132,9 +132,11 @@ In the model evaluation stage, we employ both offline testing and online monitor
  - Persistent volume stores track embeddings, models, test logs
  - Preprocessing scripts + evaluation pipeline containerized
 
-The data pipeline starts by collecting data from two primary sources: real-time user inputs and an offline playlist dataset. Python scripts extract key components from these sources—identifying seed tracks and their corresponding next-track labels. The raw data is then processed through an ETL phase where it is extracted, cleansed (removing duplicates and handling missing values), and standardized into a consistent format. Finally, the cleaned data is loaded into an intermediate storage area for further use.
+The data pipeline begins by collecting data from two primary sources: real-time user inputs and our offline playlist dataset. Python scripts extract key components from these sources, identifying seed tracks and their corresponding next-track labels. Our dataset, which includes a comprehensive collection of playlists along with detailed track and artist metadata, serves as a robust foundation for building predictive models.
 
-Following data ingestion and ETL, the pipeline moves into feature extraction and dataset management. In this stage, song lyrics and titles are converted into text embeddings that capture their semantic context, while tracks are classified by genre to enrich the metadata—a crucial step for cold start scenarios. Additionally, numerical representations of the tracks are computed as key features for next-track prediction. To ensure reproducibility and facilitate debugging, each processed dataset version is recorded along with detailed annotations of the transformation steps.
+Once the raw data is collected, it enters the ETL phase. During extraction, data is gathered from both online and offline sources. The transformation step then cleanses the data by removing duplicates, addressing missing values, and standardizing the format to ensure uniformity. Finally, the cleaned data is loaded into an intermediate storage area, making it readily available for subsequent processing.
+
+In the final stage, the pipeline performs feature extraction and dataset management. Song lyrics and titles are processed to generate text embeddings that capture semantic nuances, while genre information is used to enrich track metadata—a key factor in handling cold start scenarios. Additionally, numerical embeddings for tracks are computed to support next-track prediction. Each processed version of the dataset is carefully documented with detailed annotations, ensuring reproducibility and traceability throughout the system.
 
 ### Continuous X
 - Use **Terraform/Helm** to define infrastructure
