@@ -8,10 +8,10 @@ LLaRA++: Beyond Language Modeling — Hybrid Embedding and User-Aware Curriculum
 | Name             | Responsible for                                      | Link to their commits in this repo             |
 |------------------|-------------------------------------------------------|------------------------------------------------|
 | All team members | Overall system design, integration, and documentation |       |
-| Member A         | Model training (LightGCN, Projector, LLaRA)           |  |
-| Member B         | Model quantization, FastAPI deployment & monitoring   |  |
+| Muyuan Zhang        | Model training (LightGCN, Projector, LLaRA)           |  |
+| Siqi Xu       | Model quantization, FastAPI deployment & monitoring   |  |
 | Yufei Wang         | Data preprocessing, lyric/title embedding, cold start |  |
-| Member D         | CI/CD, pipeline integration, dashboard                |  |
+| Steven Wang       | CI/CD, pipeline integration, dashboard                |  |
 
 ## System diagram
 (See diagram in the repository `main/system_diagram.png` — this includes the MPD input → LightGCN & BERT/DistilBERT → SR2LLM → LLaRA + curriculum prompt tuning → quantized ONNX model → API server → evaluation dashboard.)
