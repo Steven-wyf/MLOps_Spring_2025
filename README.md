@@ -127,12 +127,12 @@ In the model evaluation stage, we employ both offline testing and online monitor
 
 ### Data pipeline
 Data Pipeline
-1. Data Ingestion
+- Data Ingestion
     - Online Inputs & Offline Playlists:
         - The pipeline accepts data in real-time from user inputs as well as batch data from an offline playlists dataset.
     - Script-Based Extraction:
         - Python scripts are used to extract essential components from playlists, such as seed tracks and their corresponding next-track labels.
-2. ETL (Extract, Transform, Load)
+- ETL (Extract, Transform, Load)
    - Extraction:
         - Raw data is gathered from both online and offline sources.
     - Transformation:
@@ -140,14 +140,14 @@ Data Pipeline
         - Data is standardized into consistent formats, ensuring that seed tracks and target labels are correctly structured for downstream processing.
     - Loading:
         - The transformed data is loaded into intermediate storage, making it readily accessible for subsequent stages.
-3. Feature Extraction
+- Feature Extraction
     - Text Embeddings:
         - Song lyrics and titles are processed to generate embeddings that capture semantic relationships and contextual information.
     - Genre Classification:
         - Tracks are classified into genres to enrich metadata, which is particularly beneficial during cold start scenarios where historical data is sparse.
     - Track Embeddings:
         - Numerical representations (embeddings) of tracks are computed to serve as key features for the next-track prediction model.
-4. Dataset Versioning
+- Dataset Versioning
     - Version Control:
         - Processed datasets are versioned using tools like DVC or Git LFS. This enables reproducibility and tracking of all data transformations.
     - Traceability:
