@@ -13,15 +13,15 @@ LLaRA++ is a cold-start music recommendation system that unifies graph-based col
 | Steven Wang       | CI/CD, pipeline integration, dashboard                |  |
 
 ## System diagram
-![LLaRA++ Pipeline Diagram](System-diagram.png)
+![LLaRA++ Pipeline Diagram](./references/System-diagram.png)
 
 ## Summary of outside materials
 | Dataset / Model                         | How it was created                                            | Conditions of use |
 |----------------------------------------|----------------------------------------------------------------|-------------------|
 | [Million Playlist Dataset (MPD)](https://www.aicrowd.com/challenges/spotify-million-playlist-dataset-challenge)         | Collected from US Spotify users 2010–2017, 1M playlists        | Research only, under AIcrowd challenge license|
-| [DistilBERT / BERT](https://github.com/Steven-wyf/MLOps_Spring_2025/blob/main/bert-powered%20book%20genre%20classfication.pdf)                      | Pretrained on Wikipedia + BookCorpus                         | Open under Apache 2.0       |
-| [LightGCN Enhanced (from paper)](https://github.com/Steven-wyf/MLOps_Spring_2025/blob/main/Embedding%20Enhancement%20Method%20for%20LightGCN%20in%20Recommendation%20Information%20Systems.pdf)       | Constructed from playlist-track-user graph                   | Public research use         |
-| [LLaRA code from SIGIR ’24 paper](https://github.com/Steven-wyf/MLOps_Spring_2025/blob/main/llara.pdf)      | Hybrid prompt & curriculum tuning idea                       | MIT License on GitHub       |
+| [DistilBERT / BERT](https://github.com/Steven-wyf/MLOps_Spring_2025/blob/main/references/Exploring%20Genre%20and%20Success%20Classification%20through%20Song%20Lyrics%20using%20DistilBERT.pdf)                     | Pretrained on Wikipedia + BookCorpus                         | Open under Apache 2.0       |
+| [LightGCN Enhanced (from paper)](https://github.com/Steven-wyf/MLOps_Spring_2025/blob/main/references/Embedding%20Enhancement%20Method%20for%20LightGCN%20in%20Recommendation%20Information%20Systems.pdf)       | Constructed from playlist-track-user graph                   | Public research use         |
+| [LLaRA code from SIGIR ’24 paper](https://github.com/Steven-wyf/MLOps_Spring_2025/blob/main/references/llara.pdf)      | Hybrid prompt & curriculum tuning idea                       | MIT License on GitHub       |
 
 The Million Playlist Dataset(MPD) contains 1,000,000 Playlists. The playlists contain over 2 million unique tracks by 300,00 artists. 
 Each data entry is formatted as followed:
