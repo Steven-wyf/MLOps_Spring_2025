@@ -1,4 +1,4 @@
-name: tracking_service
+version: '3.8'
 services:
   # MinIO object store service provides storage for artifacts, models
   minio:
