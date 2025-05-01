@@ -54,7 +54,7 @@ services:
       - postgres_data:/var/lib/postgresql/data  # use a volume so storage persists beyond container lifetype
 
   mlflow:
-    build: ./mlflow
+    image: ghcr.io/mlflow/mlflow:v2.20.2
     container_name: mlflow
     restart: always
     depends_on:
