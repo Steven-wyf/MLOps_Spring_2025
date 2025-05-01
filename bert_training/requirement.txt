@@ -1,0 +1,7 @@
+mlflow
+boto3
+psycopg2-binary
+transformers
+datasets
+torch
+jupyter
