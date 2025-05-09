@@ -7,7 +7,7 @@ variable "suffix" {
 variable "key" {
   description = "Name of key pair"
   type        = string
-  default     = "id_rsa_chameleon"
+  default     = "project_key"
 }
 
 variable "nodes" {
