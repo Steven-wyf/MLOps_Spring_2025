@@ -1,21 +1,132 @@
 version: "3.8"
 
 services:
-  trainer:
-    build: .
+  bert-trainer:
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: bert-trainer
-    ports:
-      - "8888:8888"  # Jupyter access
     volumes:
-      - ./data:/app/data
+      - /mnt/block:/mnt/block
       - ./outputs:/app/outputs
-      - ./notebook:/app/notebook
     environment:
-      MLFLOW_TRACKING_URI: http://<NODE1_IP>:8000
-      MLFLOW_S3_ENDPOINT_URL: http://<NODE1_IP>:9000
-      AWS_ACCESS_KEY_ID: your-access-key
-      AWS_SECRET_ACCESS_KEY: your-secret-key
-    command: >
-      bash -c "
-        jupyter notebook --ip=0.0.0.0 --port=8888 --no-browser --allow-root
-      "
+      MLFLOW_TRACKING_URI: ${MLFLOW_URI:-http://129.114.25.37:8000}
+      MLFLOW_S3_ENDPOINT_URL: ${MINIO_URI:-http://129.114.25.37:9000}
+      AWS_ACCESS_KEY_ID: ${MINIO_ACCESS_KEY:-your-access-key}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_SECRET_KEY}
+      PLAYLIST_DATA_DIR: /mnt/block
+      OUTPUT_DIR: /app/outputs
+    command: ["python", "bert.py"]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  lightgcn-trainer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: lightgcn-trainer
+    volumes:
+      - /mnt/block:/mnt/block
+      - ./outputs:/app/outputs
+    environment:
+      MLFLOW_TRACKING_URI: ${MLFLOW_URI:-http://129.114.25.37:8000}
+      MLFLOW_S3_ENDPOINT_URL: ${MINIO_URI:-http://129.114.25.37:9000}
+      AWS_ACCESS_KEY_ID: ${MINIO_ACCESS_KEY:-your-access-key}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_SECRET_KEY}
+      PLAYLIST_DATA_DIR: /mnt/block
+      OUTPUT_DIR: /app/outputs
+    command: ["python", "lightgcn.py"]
+    depends_on:
+      - bert-trainer
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  mlp-trainer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mlp-trainer
+    volumes:
+      - /mnt/block:/mnt/block
+      - ./outputs:/app/outputs
+    environment:
+      MLFLOW_TRACKING_URI: ${MLFLOW_URI:-http://129.114.25.37:8000}
+      MLFLOW_S3_ENDPOINT_URL: ${MINIO_URI:-http://129.114.25.37:9000}
+      AWS_ACCESS_KEY_ID: ${MINIO_ACCESS_KEY:-your-access-key}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_SECRET_KEY}
+      PLAYLIST_DATA_DIR: /mnt/block
+      OUTPUT_DIR: /app/outputs
+      BERT_NPZ: /app/outputs/bert_track_embeddings.npz
+      LIGHTGCN_NPZ: /app/outputs/lightgcn_embeddings.npz
+    command: ["python", "mlp.py"]
+    depends_on:
+      - lightgcn-trainer
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  llara-trainer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: llara-trainer
+    volumes:
+      - /mnt/block:/mnt/block
+      - ./outputs:/app/outputs
+    environment:
+      MLFLOW_TRACKING_URI: ${MLFLOW_URI:-http://129.114.25.37:8000}
+      MLFLOW_S3_ENDPOINT_URL: ${MINIO_URI:-http://129.114.25.37:9000}
+      AWS_ACCESS_KEY_ID: ${MINIO_ACCESS_KEY:-your-access-key}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_SECRET_KEY}
+      PLAYLIST_DATA_DIR: /mnt/block
+      OUTPUT_DIR: /app/outputs
+      PROJECTED_EMB: /app/outputs/projected_lightgcn.npz
+    command: ["python", "llara.py"]
+    depends_on:
+      - mlp-trainer
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  inference-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: playlist-recommendation-api
+    volumes:
+      - ./outputs:/app/outputs
+    ports:
+      - "8080:8000"  # Map container port 8000 to host port 8080
+    environment:
+      MODEL_DIR: /app/outputs
+      PORT: 8000
+      BATCH_SIZE: 32
+      TOP_K: 10
+    command: ["python", "inference_api.py"]
+    depends_on:
+      - llara-trainer
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
