@@ -53,4 +53,4 @@ if __name__ == "__main__":
     path = sys.argv[1]
     if len(sys.argv) > 2 and sys.argv[2] == "--quick":
         quick = True
-    process_data(path, "../processed", quick)
+    process_data(path, "/mnt/block/processed", quick)
