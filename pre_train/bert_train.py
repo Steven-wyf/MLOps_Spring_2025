@@ -11,6 +11,8 @@ from transformers import DistilBertTokenizer, DistilBertModel
 from tqdm import tqdm
 import time
 from datetime import datetime
+import gc
+import psutil
 
 # Configure logging
 LOG_DIR = os.environ.get("LOG_DIR", "./logs")
@@ -43,7 +45,12 @@ MODEL_PATH = os.path.join(OUTPUT_DIR, "bert_encoder_model.pt")
 
 # Model parameters
 MAX_LEN = 128
-BATCH_SIZE = 32
+# Smaller batch size to reduce memory usage
+BATCH_SIZE = int(os.environ.get("BERT_BATCH_SIZE", "16"))
+# Process data in chunks to avoid loading everything into memory
+CHUNK_SIZE = int(os.environ.get("CHUNK_SIZE", "1000"))
+# Memory management
+MEMORY_LIMIT_PERCENT = float(os.environ.get("MEMORY_LIMIT_PERCENT", "85.0"))
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # ------------------------ #
 
@@ -62,11 +69,124 @@ def configure_mlflow():
     logger.info(f"MLflow S3 endpoint URL: {MLFLOW_S3_ENDPOINT_URL}")
     logger.info(f"Experiment name: {EXPERIMENT_NAME}")
 
+def check_memory_usage():
+    """Check current memory usage and force garbage collection if necessary"""
+    memory_info = psutil.virtual_memory()
+    memory_percent = memory_info.percent
+    
+    if memory_percent > MEMORY_LIMIT_PERCENT:
+        logger.warning(f"Memory usage high ({memory_percent:.1f}%). Triggering garbage collection.")
+        gc.collect()
+        torch.cuda.empty_cache()
+        memory_info = psutil.virtual_memory()
+        logger.info(f"Memory usage after GC: {memory_info.percent:.1f}%")
+        
+    return memory_info.percent
+
+def process_in_chunks(track_data):
+    """Process track data in chunks to minimize memory usage"""
+    track_uris = list(track_data.keys())
+    total_tracks = len(track_uris)
+    chunk_indices = list(range(0, total_tracks, CHUNK_SIZE))
+    
+    all_embeddings = {}
+    
+    for i, start_idx in enumerate(chunk_indices):
+        end_idx = min(start_idx + CHUNK_SIZE, total_tracks)
+        chunk_uris = track_uris[start_idx:end_idx]
+        
+        logger.info(f"Processing chunk {i+1}/{len(chunk_indices)} ({start_idx}:{end_idx}, {len(chunk_uris)} tracks)")
+        
+        # Process chunk
+        chunk_embeddings = process_track_chunk(chunk_uris, track_data)
+        
+        # Add to overall embeddings
+        all_embeddings.update(chunk_embeddings)
+        
+        # Save intermediate results periodically
+        if (i + 1) % 5 == 0 or (i + 1) == len(chunk_indices):
+            logger.info(f"Saving intermediate embeddings ({len(all_embeddings)} tracks so far)")
+            tmp_path = os.path.join(OUTPUT_DIR, f"bert_embeddings_temp_{i+1}.npz")
+            np.savez(tmp_path, **all_embeddings)
+        
+        # Check memory usage and clean up if necessary
+        check_memory_usage()
+        
+    return all_embeddings
+
+def process_track_chunk(chunk_uris, track_data):
+    """Process a single chunk of track data to generate embeddings"""
+    chunk_texts = []
+    
+    for track_uri in chunk_uris:
+        track_info = track_data[track_uri]
+        # Assuming the JSON has text field, otherwise construct from available fields
+        if 'text' in track_info:
+            chunk_texts.append(track_info['text'])
+        else:
+            # Construct text from available fields (modify based on actual JSON structure)
+            track_name = track_info.get('track_name', 'Unknown Track')
+            artist_name = track_info.get('artist_name', 'Unknown Artist')
+            genre = track_info.get('genre', 'Unknown Genre')
+            chunk_texts.append(f"Track: {track_name} Artist: {artist_name} Genre: {genre}")
+    
+    # Generate embeddings for chunk
+    chunk_embeddings = generate_embeddings(chunk_uris, chunk_texts)
+    
+    return chunk_embeddings
+
+def generate_embeddings(track_uris, track_texts):
+    """Generate embeddings for a batch of track texts"""
+    # Load model and tokenizer (could optimize to only load once)
+    tokenizer = DistilBertTokenizer.from_pretrained("distilbert-base-uncased")
+    model = DistilBertModel.from_pretrained("distilbert-base-uncased").to(DEVICE)
+    
+    embeddings = {}
+    
+    # Process in batches
+    for i in tqdm(range(0, len(track_uris), BATCH_SIZE), desc="Generating embeddings"):
+        batch_texts = track_texts[i:i+BATCH_SIZE]
+        batch_uris = track_uris[i:i+BATCH_SIZE]
+        
+        # Tokenize
+        inputs = tokenizer(
+            batch_texts,
+            padding="max_length",
+            truncation=True,
+            max_length=MAX_LEN,
+            return_tensors="pt"
+        ).to(DEVICE)
+        
+        # Generate embeddings
+        with torch.no_grad():
+            outputs = model(**inputs)
+            
+            # Use CLS token embeddings (first token of last layer)
+            cls_embeddings = outputs.last_hidden_state[:, 0, :].cpu().numpy()
+            
+            # Store embeddings
+            for j, uri in enumerate(batch_uris):
+                if j < len(cls_embeddings):  # Ensure index is valid
+                    embeddings[uri] = cls_embeddings[j]
+        
+        # Clean up to free memory
+        del inputs, outputs, cls_embeddings
+        torch.cuda.empty_cache() if torch.cuda.is_available() else None
+    
+    # Clear model and tokenizer from memory
+    del model, tokenizer
+    gc.collect()
+    torch.cuda.empty_cache() if torch.cuda.is_available() else None
+    
+    return embeddings
+
 def main():
     """Main BERT training and embedding generation function"""
     start_time = time.time()
     logger.info(f"Starting BERT training - Run ID: {RUN_ID}")
     logger.info(f"Using device: {DEVICE}")
+    logger.info(f"Memory usage before starting: {check_memory_usage():.1f}%")
+    logger.info(f"Batch size: {BATCH_SIZE}, Chunk size: {CHUNK_SIZE}")
     
     # Configure MLflow
     configure_mlflow()
@@ -81,27 +201,6 @@ def main():
         logger.error(f"Error loading track metadata: {str(e)}")
         raise
     
-    # Prepare track data
-    track_uris = []
-    track_texts = []
-    
-    for track_uri, track_info in track_data.items():
-        track_uris.append(track_uri)
-        # Assuming the JSON has text field, otherwise construct from available fields
-        if 'text' in track_info:
-            track_texts.append(track_info['text'])
-        else:
-            # Construct text from available fields (modify based on actual JSON structure)
-            track_name = track_info.get('track_name', 'Unknown Track')
-            artist_name = track_info.get('artist_name', 'Unknown Artist')
-            genre = track_info.get('genre', 'Unknown Genre')
-            track_texts.append(f"Track: {track_name} Artist: {artist_name} Genre: {genre}")
-    
-    # Load model and tokenizer
-    logger.info("Loading DistilBERT model and tokenizer...")
-    tokenizer = DistilBertTokenizer.from_pretrained("distilbert-base-uncased")
-    model = DistilBertModel.from_pretrained("distilbert-base-uncased").to(DEVICE)
-    
     # Start MLflow run
     with mlflow.start_run(run_name=f"bert-embeddings-{RUN_ID}") as run:
         run_id = run.info.run_id
@@ -112,41 +211,17 @@ def main():
             "model": "distilbert-base-uncased",
             "max_length": MAX_LEN,
             "batch_size": BATCH_SIZE,
-            "num_tracks": len(track_uris),
+            "chunk_size": CHUNK_SIZE,
+            "memory_limit_percent": MEMORY_LIMIT_PERCENT,
+            "num_tracks": len(track_data),
             "embedding_dim": 768,  # DistilBERT dim
             "device": str(DEVICE)
         }
         mlflow.log_params(params)
         
-        # Generate embeddings
+        # Generate embeddings chunk by chunk
         logger.info("Generating track embeddings...")
-        embeddings = {}
-        
-        # Process in batches
-        for i in tqdm(range(0, len(track_uris), BATCH_SIZE)):
-            batch_texts = track_texts[i:i+BATCH_SIZE]
-            batch_uris = track_uris[i:i+BATCH_SIZE]
-            
-            # Tokenize
-            inputs = tokenizer(
-                batch_texts,
-                padding="max_length",
-                truncation=True,
-                max_length=MAX_LEN,
-                return_tensors="pt"
-            ).to(DEVICE)
-            
-            # Generate embeddings
-            with torch.no_grad():
-                outputs = model(**inputs)
-                
-                # Use CLS token embeddings (first token of last layer)
-                cls_embeddings = outputs.last_hidden_state[:, 0, :].cpu().numpy()
-                
-                # Store embeddings
-                for j, uri in enumerate(batch_uris):
-                    if j < len(cls_embeddings):  # Ensure index is valid
-                        embeddings[uri] = cls_embeddings[j]
+        embeddings = process_in_chunks(track_data)
         
         # Save embeddings to NPZ file
         logger.info(f"Saving {len(embeddings)} track embeddings to {OUTPUT_NPZ_PATH}")
@@ -156,6 +231,9 @@ def main():
         mlflow.log_artifact(OUTPUT_NPZ_PATH, "embeddings")
         
         # Save tokenizer and model
+        # Load again as we've deleted them to save memory
+        tokenizer = DistilBertTokenizer.from_pretrained("distilbert-base-uncased")
+        model = DistilBertModel.from_pretrained("distilbert-base-uncased")
         torch.save({
             'model_state_dict': model.state_dict(),
             'tokenizer_config': tokenizer.init_kwargs,
@@ -175,6 +253,7 @@ def main():
         logger.info(f"BERT embeddings generation completed in {duration:.2f} seconds")
         logger.info(f"Generated embeddings for {len(embeddings)} tracks")
         logger.info(f"MLflow run ID: {run_id}")
+        logger.info(f"Final memory usage: {check_memory_usage():.1f}%")
         
         # Write model info to a file for next steps
         model_info = {
@@ -187,6 +266,15 @@ def main():
         
         with open(os.path.join(OUTPUT_DIR, "bert_model_info.json"), "w") as f:
             json.dump(model_info, f, indent=2)
+        
+        # Clean temporary files
+        for temp_file in os.listdir(OUTPUT_DIR):
+            if temp_file.startswith("bert_embeddings_temp_") and temp_file.endswith(".npz"):
+                try:
+                    os.remove(os.path.join(OUTPUT_DIR, temp_file))
+                    logger.info(f"Removed temporary file: {temp_file}")
+                except Exception as e:
+                    logger.warning(f"Could not remove temp file {temp_file}: {str(e)}")
 
 if __name__ == "__main__":
     try:
