@@ -1,5 +1,5 @@
 apiVersion: v2
-name: mlops-canary
+name: gourmetgram-canary
 version: 1.0.0
-description: mlops Canary Deployment
+description: Gourmetgram Canary Deployment
 
