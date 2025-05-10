@@ -13,7 +13,7 @@ from datetime import datetime
 from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score, precision_recall_fscore_support
+from sklearn.metrics import accuracy_score, precision_recall_fscore_support, ndcg_score
 
 # Configure logging
 LOG_DIR = os.environ.get("LOG_DIR", "./logs")
@@ -47,6 +47,7 @@ METRICS_PATH = os.path.join(OUTPUT_DIR, "llara_metrics.json")
 
 # Check for previous model info
 MLP_MODEL_INFO = os.path.join(OUTPUT_DIR, "mlp_model_info.json")
+LIGHTGCN_MODEL_INFO = os.path.join(OUTPUT_DIR, "lightgcn_model_info.json")
 
 # Model parameters
 HIDDEN_DIM = 512
@@ -55,7 +56,12 @@ LEARNING_RATE = 0.001
 WEIGHT_DECAY = 1e-5
 EPOCHS = 50
 BATCH_SIZE = 128
-TEST_SIZE = 0.2
+# Data split ratios - same as LightGCN
+TRAIN_RATIO = 0.8
+VAL_RATIO = 0.1
+TEST_RATIO = 0.1
+# Evaluation parameters
+EVAL_TOP_K = [5, 10, 20]
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # ------------------------ #
 
@@ -75,50 +81,138 @@ def configure_mlflow():
     logger.info(f"Experiment name: {EXPERIMENT_NAME}")
 
 def load_data():
-    """Load projected embeddings and playlist data for training"""
-    # Load projected embeddings
+    """Load and prepare data for LlaRA training with consistent dataset splits"""
+    # STEP 1: Load pre-computed embeddings from MLP projection
     logger.info(f"Loading projected embeddings from {PROJECTED_EMB_PATH}")
     embedding_data = np.load(PROJECTED_EMB_PATH)
     track_ids = list(embedding_data.files)
     
-    # Create track ID to index mapping
+    # Create a mapping from track URI to numeric index
     track_to_idx = {track_id: i for i, track_id in enumerate(track_ids)}
     
-    # Load playlist data
+    # STEP 2: Load playlist data
     logger.info(f"Loading playlist data from {PLAYLIST_DATA_PATH}")
     playlist_df = pd.read_csv(PLAYLIST_DATA_PATH)
     
-    # Process playlist data to create training pairs
+    # STEP 3: Use LightGCN splits or create our own
+    # Try to load existing splits from the LightGCN model for consistency
+    split_info = get_lightgcn_splits()
+    
+    # Group playlists for processing
     logger.info("Creating playlist continuation training pairs")
     playlist_groups = playlist_df.groupby('playlist_id')
+    all_playlists = list(playlist_groups.groups.keys())
     
-    # Prepare data for training
-    input_tracks = []
-    target_tracks = []
+    # STEP 4: Get train/val/test playlist assignments
+    if split_info and 'train_playlists' in split_info:
+        # Use existing split from LightGCN
+        train_playlists = split_info['train_playlists']
+        val_playlists = split_info['val_playlists']
+        test_playlists = split_info['test_playlists']
+        logger.info("Using playlist splits from LightGCN")
+    else:
+        # Create new split with same 8:1:1 ratio
+        logger.info("Creating new playlist split with 8:1:1 ratio")
+        train_playlists, val_playlists, test_playlists = create_new_split(all_playlists)
     
+    # Log split statistics
+    logger.info(f"Data split: {len(train_playlists)} train, {len(val_playlists)} validation, {len(test_playlists)} test playlists")
+    
+    # STEP 5: Create training pairs for each split
+    train_inputs, train_targets = [], []
+    val_inputs, val_targets = [], []
+    test_inputs, test_targets = [], []
+    
+    # Process each playlist to create input-output pairs
     for playlist_id, tracks in tqdm(playlist_groups, desc="Processing playlists"):
+        # Get ordered tracks in this playlist
         track_list = tracks['track_uri'].tolist()
         
+        # Skip playlists with only one track (need at least 2 for sequence prediction)
         if len(track_list) < 2:
-            continue  # Skip playlists with only one track
+            continue
         
-        # Create training pairs: each track predicts the next track in the playlist
+        # For each track in playlist, predict the next track
         for i in range(len(track_list) - 1):
-            current_track = track_list[i]
-            next_track = track_list[i + 1]
+            current_track = track_list[i]      # Input: current track
+            next_track = track_list[i + 1]     # Target: next track
             
-            # Check if both tracks have embeddings
-            if current_track in track_to_idx and next_track in track_to_idx:
-                input_tracks.append(current_track)
-                target_tracks.append(next_track)
+            # Skip if either track doesn't have an embedding
+            if current_track not in track_to_idx or next_track not in track_to_idx:
+                continue
+                
+            # Add to appropriate split based on playlist ID
+            if playlist_id in train_playlists:
+                train_inputs.append(current_track)
+                train_targets.append(next_track)
+            elif playlist_id in val_playlists:
+                val_inputs.append(current_track)
+                val_targets.append(next_track)
+            elif playlist_id in test_playlists:
+                test_inputs.append(current_track)
+                test_targets.append(next_track)
     
-    logger.info(f"Created {len(input_tracks)} training pairs")
+    # STEP 6: Convert track IDs to embeddings and indices
+    # Log data statistics
+    logger.info(f"Created {len(train_inputs)} training, {len(val_inputs)} validation, and {len(test_inputs)} test pairs")
     
-    # Convert to embeddings and target indices
-    X = np.array([embedding_data[track] for track in input_tracks])
-    y = np.array([track_to_idx[track] for track in target_tracks])
+    # Convert input tracks to their embeddings
+    X_train = np.array([embedding_data[track] for track in train_inputs])
+    X_val = np.array([embedding_data[track] for track in val_inputs])
+    X_test = np.array([embedding_data[track] for track in test_inputs])
     
-    return X, y, track_to_idx, track_ids
+    # Convert target tracks to their indices
+    y_train = np.array([track_to_idx[track] for track in train_targets])
+    y_val = np.array([track_to_idx[track] for track in val_targets])
+    y_test = np.array([track_to_idx[track] for track in test_targets])
+    
+    return X_train, X_val, X_test, y_train, y_val, y_test, track_to_idx, track_ids
+
+def get_lightgcn_splits():
+    """Attempt to load playlist splits from LightGCN for consistency"""
+    try:
+        if os.path.exists(LIGHTGCN_MODEL_INFO):
+            with open(LIGHTGCN_MODEL_INFO, 'r') as f:
+                lightgcn_info = json.load(f)
+                
+                # If split file exists, load it
+                if 'split_info_file' in lightgcn_info and os.path.exists(lightgcn_info['split_info_file']):
+                    with open(lightgcn_info['split_info_file'], 'r') as sf:
+                        return json.load(sf)
+    except Exception as e:
+        logger.warning(f"Could not load LightGCN split info: {str(e)}")
+    
+    return None
+
+def create_new_split(playlists):
+    """Create a new 8:1:1 train/val/test split of playlists"""
+    # Shuffle playlists randomly
+    np.random.seed(42)  # For reproducibility
+    np.random.shuffle(playlists)
+    
+    # Calculate sizes for each split
+    train_size = int(len(playlists) * TRAIN_RATIO)
+    val_size = int(len(playlists) * VAL_RATIO)
+    
+    # Split the playlists
+    train_playlists = playlists[:train_size]
+    val_playlists = playlists[train_size:train_size+val_size]
+    test_playlists = playlists[train_size+val_size:]
+    
+    # Save split info for future reference
+    split_info = {
+        'train_playlists': train_playlists,
+        'val_playlists': val_playlists,
+        'test_playlists': test_playlists
+    }
+    
+    # Save to file
+    split_info_file = os.path.join(OUTPUT_DIR, "playlist_split_info.json")
+    with open(split_info_file, 'w') as f:
+        json.dump(split_info, f)
+    logger.info(f"Saved new playlist split information to {split_info_file}")
+    
+    return train_playlists, val_playlists, test_playlists
 
 class LlaRAClassifier(nn.Module):
     """Linear layer with Regularization and Activation (LlaRA) for playlist continuation"""
@@ -136,17 +230,8 @@ class LlaRAClassifier(nn.Module):
     def forward(self, x):
         return self.classifier(x)
 
-def train_llara(X, y):
-    """Train LlaRA model for playlist continuation"""
-    # Split into train, validation, and test sets
-    X_train_val, X_test, y_train_val, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=42
-    )
-    
-    X_train, X_val, y_train, y_val = train_test_split(
-        X_train_val, y_train_val, test_size=0.25, random_state=42  # 0.25 * 0.8 = 0.2 of total
-    )
-    
+def train_llara(X_train, X_val, X_test, y_train, y_val, y_test):
+    """Train LlaRA model for playlist continuation with pre-split data"""
     # Create datasets and dataloaders
     train_dataset = TensorDataset(
         torch.tensor(X_train, dtype=torch.float32),
@@ -168,8 +253,9 @@ def train_llara(X, y):
     test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE)
     
     # Initialize model
-    input_dim = X.shape[1]
-    num_classes = len(np.unique(y))
+    input_dim = X_train.shape[1]
+    all_targets = np.concatenate([y_train, y_val, y_test])
+    num_classes = len(np.unique(all_targets))
     
     model = LlaRAClassifier(
         input_dim=input_dim,
@@ -187,7 +273,7 @@ def train_llara(X, y):
     
     criterion = nn.CrossEntropyLoss()
     
-    # Train model
+    # Training tracking variables
     train_losses = []
     val_losses = []
     val_accuracies = []
@@ -197,6 +283,7 @@ def train_llara(X, y):
     logger.info("Starting LlaRA training...")
     progress_bar = tqdm(range(EPOCHS), desc="Training LlaRA")
     
+    # ---- TRAINING LOOP ---- #
     for epoch in progress_bar:
         # Training phase
         model.train()
@@ -254,11 +341,14 @@ def train_llara(X, y):
             "val_acc": val_acc
         })
     
-    # Load best model
+    # Load best model for evaluation
     model.load_state_dict(best_model_state)
     
-    # Evaluate on test set
+    # ---- EVALUATION PHASE ---- #
+    logger.info("Evaluating model on test set...")
     model.eval()
+    
+    # Calculate standard classification metrics
     test_preds = []
     test_targets = []
     
@@ -270,50 +360,115 @@ def train_llara(X, y):
             test_preds.extend(preds.cpu().numpy())
             test_targets.extend(targets.cpu().numpy())
     
-    # Calculate metrics
-    test_acc = accuracy_score(test_targets, test_preds)
+    # Basic classification metrics
+    acc = accuracy_score(test_targets, test_preds)
     precision, recall, f1, _ = precision_recall_fscore_support(
         test_targets, test_preds, average='macro'
     )
     
-    # Calculate Top-K accuracy
-    top_k_accs = []
-    k_values = [5, 10, 20]
-    
-    with torch.no_grad():
-        for k in k_values:
-            top_k_correct = 0
-            total = 0
-            
-            for inputs, targets in test_loader:
-                inputs, targets = inputs.to(DEVICE), targets.to(DEVICE)
-                outputs = model(inputs)
-                
-                # Get top-k predictions
-                _, top_k_preds = torch.topk(outputs, k, dim=1)
-                
-                # Check if target is in top-k
-                for i, target in enumerate(targets):
-                    if target in top_k_preds[i]:
-                        top_k_correct += 1
-                
-                total += targets.size(0)
-            
-            top_k_acc = top_k_correct / total
-            top_k_accs.append(top_k_acc)
-    
-    metrics = {
-        "accuracy": test_acc,
+    # Store results
+    results = {
+        "accuracy": acc,
         "precision": precision,
         "recall": recall,
         "f1": f1,
-        "top_5_accuracy": top_k_accs[0],
-        "top_10_accuracy": top_k_accs[1],
-        "top_20_accuracy": top_k_accs[2],
         "best_val_accuracy": best_val_acc
     }
     
-    return model, train_losses, val_losses, val_accuracies, metrics
+    # ---- CALCULATE RANKING METRICS (Precision@k, Recall@k, NDCG@k) ---- #
+    logger.info("Calculating ranking metrics...")
+    
+    with torch.no_grad():
+        # For each k value (5, 10, 20)
+        for k in EVAL_TOP_K:
+            # Initialize metric trackers
+            precision_values = []  # Precision@k values
+            recall_values = []     # Recall@k values
+            ndcg_values = []       # NDCG@k values
+            hits = 0               # Count of correct predictions in top-k
+            total = 0              # Total predictions made
+            
+            # Process each batch in test set
+            for inputs, targets in test_loader:
+                inputs = inputs.to(DEVICE)
+                targets = targets.to(DEVICE)
+                batch_size = inputs.size(0)
+                
+                # Get model predictions (logits)
+                logits = model(inputs)
+                
+                # Get top-k predictions for each sample
+                _, top_k_preds = torch.topk(logits, k, dim=1)
+                
+                # Evaluate each prediction in the batch
+                for i in range(batch_size):
+                    target = targets[i].item()
+                    pred_logits = logits[i].cpu().numpy()
+                    
+                    # Create ground truth one-hot vector
+                    # 1 = correct class, 0 = incorrect class
+                    ground_truth = np.zeros(num_classes)
+                    ground_truth[target] = 1
+                    
+                    # Check if correct class is in top-k predictions
+                    if target in top_k_preds[i]:
+                        hits += 1
+                    
+                    # Get top-k predicted classes
+                    top_k_indices = np.argsort(-pred_logits)[:k]
+                    
+                    # For a recommendation task, calculate:
+                    # 1. Precision@k = relevant items retrieved / k
+                    # 2. Recall@k = relevant items retrieved / total relevant
+                    # 3. NDCG@k = normalized discounted cumulative gain
+                    
+                    # Since we have a single relevant item (the true class),
+                    # precision@k = 1/k if correct, 0 if incorrect
+                    # recall@k = 1 if correct, 0 if incorrect
+                    
+                    if ground_truth[top_k_indices].sum() > 0:
+                        # There's at least one relevant item in the top-k
+                        precision_values.append(ground_truth[top_k_indices].sum() / k)
+                        recall_values.append(1.0)  # We found the item
+                        
+                        # Calculate NDCG
+                        try:
+                            ndcg = ndcg_score(
+                                ground_truth.reshape(1, -1),
+                                pred_logits.reshape(1, -1),
+                                k=k
+                            )
+                            ndcg_values.append(ndcg)
+                        except:
+                            pass
+                    else:
+                        # No relevant items in top-k
+                        precision_values.append(0.0)
+                        recall_values.append(0.0)
+                
+                total += batch_size
+            
+            # Calculate average metrics
+            hit_rate = hits / total if total > 0 else 0
+            results[f"top_{k}_accuracy"] = hit_rate
+            
+            # Calculate average precision, recall, and NDCG at k
+            if precision_values:
+                results[f"precision@{k}"] = np.mean(precision_values)
+            else:
+                results[f"precision@{k}"] = 0.0
+                
+            if recall_values:
+                results[f"recall@{k}"] = np.mean(recall_values)
+            else:
+                results[f"recall@{k}"] = 0.0
+                
+            if ndcg_values:
+                results[f"ndcg@{k}"] = np.mean(ndcg_values)
+            else:
+                results[f"ndcg@{k}"] = 0.0
+    
+    return model, train_losses, val_losses, val_accuracies, results
 
 def main():
     """Main LlaRA training function"""
@@ -324,8 +479,8 @@ def main():
     # Configure MLflow
     configure_mlflow()
     
-    # Load data
-    X, y, track_to_idx, track_ids = load_data()
+    # Load pre-split data
+    X_train, X_val, X_test, y_train, y_val, y_test, track_to_idx, track_ids = load_data()
     
     # Check for previous model info
     mlp_run_id = None
@@ -352,10 +507,13 @@ def main():
             "weight_decay": WEIGHT_DECAY,
             "epochs": EPOCHS,
             "batch_size": BATCH_SIZE,
-            "test_size": TEST_SIZE,
-            "embedding_dim": X.shape[1],
-            "num_classes": len(np.unique(y)),
-            "num_training_pairs": len(X),
+            "train_ratio": TRAIN_RATIO,
+            "val_ratio": VAL_RATIO,
+            "test_ratio": TEST_RATIO,
+            "embedding_dim": X_train.shape[1],
+            "num_train_samples": len(X_train),
+            "num_val_samples": len(X_val),
+            "num_test_samples": len(X_test),
             "device": str(DEVICE)
         }
         
@@ -371,7 +529,7 @@ def main():
         mlflow.log_params(params)
         
         # Train model
-        model, train_losses, val_losses, val_accuracies, metrics = train_llara(X, y)
+        model, train_losses, val_losses, val_accuracies, metrics = train_llara(X_train, X_val, X_test, y_train, y_val, y_test)
         
         # Save model
         torch.save(model.state_dict(), MODEL_PATH)
@@ -400,8 +558,10 @@ def main():
         
         logger.info(f"LlaRA training completed in {duration:.2f} seconds")
         logger.info(f"Test accuracy: {metrics['accuracy']:.4f}")
-        logger.info(f"Top-5 accuracy: {metrics['top_5_accuracy']:.4f}")
-        logger.info(f"Top-10 accuracy: {metrics['top_10_accuracy']:.4f}")
+        
+        # Log top-k accuracy metrics 
+        for k in EVAL_TOP_K:
+            logger.info(f"Top-{k} accuracy: {metrics[f'top_{k}_accuracy']:.4f}")
         
         # Create a track ID lookup file for inference
         track_lookup = {idx: track_id for track_id, idx in track_to_idx.items()}
@@ -415,13 +575,23 @@ def main():
             "llara_run_id": run_id,
             "model_file": MODEL_PATH,
             "metrics_file": METRICS_PATH,
-            "input_dim": X.shape[1],
+            "input_dim": X_train.shape[1],
             "hidden_dim": HIDDEN_DIM,
-            "num_classes": len(np.unique(y)),
+            "num_classes": len(np.unique(np.concatenate([y_train, y_val, y_test]))),
             "num_tracks": len(track_ids),
             "accuracy": metrics["accuracy"],
-            "top_10_accuracy": metrics["top_10_accuracy"]
+            "evaluation": {
+                "accuracy": metrics["accuracy"],
+                "f1": metrics["f1"]
+            }
         }
+        
+        # Add all top-k metrics to evaluation
+        for k in EVAL_TOP_K:
+            model_info["evaluation"][f"top_{k}_accuracy"] = metrics[f"top_{k}_accuracy"]
+            model_info["evaluation"][f"precision@{k}"] = metrics[f"precision@{k}"]
+            model_info["evaluation"][f"recall@{k}"] = metrics[f"recall@{k}"]
+            model_info["evaluation"][f"ndcg@{k}"] = metrics[f"ndcg@{k}"]
         
         if mlp_run_id:
             model_info["mlp_run_id"] = mlp_run_id
@@ -432,8 +602,18 @@ def main():
         if lightgcn_run_id:
             model_info["lightgcn_run_id"] = lightgcn_run_id
         
+        # For consistency with LightGCN
+        model_info["split_info_file"] = os.path.join(OUTPUT_DIR, "playlist_split_info.json")
+        
         with open(os.path.join(OUTPUT_DIR, "llara_model_info.json"), "w") as f:
             json.dump(model_info, f, indent=2)
+        
+        # Log enhanced evaluation metrics
+        logger.info("Evaluation metrics:")
+        for k in EVAL_TOP_K:
+            logger.info(f"Precision@{k}: {metrics[f'precision@{k}']:.4f}")
+            logger.info(f"Recall@{k}: {metrics[f'recall@{k}']:.4f}")
+            logger.info(f"NDCG@{k}: {metrics[f'ndcg@{k}']:.4f}")
         
         # Create a model version file
         model_version = datetime.now().strftime('%Y%m%d%H%M%S')

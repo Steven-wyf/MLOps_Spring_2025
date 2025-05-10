@@ -16,6 +16,7 @@ from torch_geometric.data import Data
 import scipy.sparse as sp
 import gc
 import psutil
+from sklearn.metrics import ndcg_score, precision_score, recall_score, average_precision_score
 
 # Configure logging
 LOG_DIR = os.environ.get("LOG_DIR", "./logs")
@@ -45,6 +46,7 @@ OUTPUT_DIR = os.environ.get("OUTPUT_DIR", "./outputs")
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 OUTPUT_NPZ_PATH = os.path.join(OUTPUT_DIR, "lightgcn_embeddings.npz")
 MODEL_PATH = os.path.join(OUTPUT_DIR, "lightgcn_model.pt")
+EVAL_RESULTS_PATH = os.path.join(OUTPUT_DIR, "lightgcn_eval_results.json")
 
 # Check for BERT output
 BERT_MODEL_INFO = os.path.join(OUTPUT_DIR, "bert_model_info.json")
@@ -60,6 +62,13 @@ BATCH_SIZE = int(os.environ.get("BATCH_SIZE", "1024"))
 CHUNK_SIZE = int(os.environ.get("CHUNK_SIZE", "100000"))
 # Memory management
 MEMORY_LIMIT_PERCENT = float(os.environ.get("MEMORY_LIMIT_PERCENT", "85.0"))
+# Evaluation parameters
+EVAL_TOP_K = [5, 10, 20]
+NEG_SAMPLES = 100
+# Dataset splits - 8:1:1 for train:val:test
+TRAIN_RATIO = 0.8
+VAL_RATIO = 0.1
+TEST_RATIO = 0.1
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # ------------------------ #
 
@@ -93,7 +102,7 @@ def check_memory_usage():
     return memory_info.percent
 
 def load_playlist_data_in_chunks():
-    """Load playlist interaction data efficiently in chunks"""
+    """Load playlist interaction data efficiently in chunks and create train/val/test splits"""
     logger.info(f"Loading playlist data from {PLAYLIST_DATA_PATH}")
     
     try:
@@ -101,25 +110,19 @@ def load_playlist_data_in_chunks():
         total_rows = sum(1 for _ in open(PLAYLIST_DATA_PATH, 'r')) - 1  # Subtract header
         logger.info(f"Total interactions to process: {total_rows}")
         
-        # Load data in chunks
+        # Load data in chunks to get playlist-track interactions
         chunk_indices = list(range(0, total_rows, CHUNK_SIZE))
         
-        # Create dictionaries to map playlist and track IDs to indices
-        playlist_to_idx = {}
-        track_to_idx = {}
-        next_playlist_idx = 0
-        next_track_idx = 0
+        # Track all playlist-track interactions
+        all_interactions = []
         
-        # Lists to store edge indices
-        edge_list = []
-        
-        # Process data in chunks
+        # Process data in chunks to extract all interactions
         for i, chunk_start in enumerate(chunk_indices):
             # Determine rows to skip and number of rows to read
             skip_rows = chunk_start + 1 if i > 0 else 1  # Skip header for first chunk
             nrows = min(CHUNK_SIZE, total_rows - chunk_start)
             
-            logger.info(f"Processing chunk {i+1}/{len(chunk_indices)} (rows {chunk_start+1}-{chunk_start+nrows})")
+            logger.info(f"Loading chunk {i+1}/{len(chunk_indices)} (rows {chunk_start+1}-{chunk_start+nrows})")
             
             # Read chunk
             chunk_df = pd.read_csv(
@@ -130,57 +133,89 @@ def load_playlist_data_in_chunks():
                 names=['playlist_id', 'track_uri'] if i > 0 else None
             )
             
-            # Process interactions in chunk
-            for _, row in tqdm(chunk_df.iterrows(), total=len(chunk_df), desc=f"Processing chunk {i+1}"):
-                playlist_id = row['playlist_id']
-                track_uri = row['track_uri']
-                
-                # Get or assign indices
-                if playlist_id not in playlist_to_idx:
-                    playlist_to_idx[playlist_id] = next_playlist_idx
-                    next_playlist_idx += 1
-                
-                if track_uri not in track_to_idx:
-                    track_to_idx[track_uri] = next_track_idx
-                    next_track_idx += 1
-                
-                playlist_idx = playlist_to_idx[playlist_id]
-                track_idx = track_to_idx[track_uri]
-                
-                # Store edge (bidirectional)
-                edge_list.append([playlist_idx, track_idx + next_playlist_idx])
-                edge_list.append([track_idx + next_playlist_idx, playlist_idx])
+            # Add to interactions
+            for _, row in chunk_df.iterrows():
+                all_interactions.append((row['playlist_id'], row['track_uri']))
             
             # Check memory and clean up
             check_memory_usage()
             
-            # Save intermediate edge list if memory usage is high
+            # Save interactions to disk if memory usage is high
             if psutil.virtual_memory().percent > MEMORY_LIMIT_PERCENT * 0.8:
-                logger.info(f"Intermediate save of edge list (length: {len(edge_list)})")
-                temp_edge_file = os.path.join(OUTPUT_DIR, f"lightgcn_edges_temp_{i}.npy")
-                np.save(temp_edge_file, np.array(edge_list))
-                edge_list = []
+                logger.info(f"Intermediate save of interactions (length: {len(all_interactions)})")
+                temp_file = os.path.join(OUTPUT_DIR, f"lightgcn_interactions_temp_{i}.pkl")
+                pd.DataFrame(all_interactions, columns=['playlist_id', 'track_uri']).to_pickle(temp_file)
+                all_interactions = []
                 gc.collect()
+        
+        # Load any saved interactions
+        temp_files = [f for f in os.listdir(OUTPUT_DIR) if f.startswith("lightgcn_interactions_temp_") and f.endswith(".pkl")]
+        if temp_files:
+            logger.info(f"Loading {len(temp_files)} saved interaction files")
+            for temp_file in temp_files:
+                temp_interactions = pd.read_pickle(os.path.join(OUTPUT_DIR, temp_file))
+                all_interactions.extend(temp_interactions.values.tolist())
+                os.remove(os.path.join(OUTPUT_DIR, temp_file))
+        
+        # Create a DataFrame with all interactions
+        interactions_df = pd.DataFrame(all_interactions, columns=['playlist_id', 'track_uri'])
+        
+        # Group by playlist to handle playlist-level splitting
+        playlist_groups = interactions_df.groupby('playlist_id')
+        all_playlists = list(playlist_groups.groups.keys())
+        
+        # Shuffle playlists for random splitting
+        np.random.seed(42)
+        np.random.shuffle(all_playlists)
+        
+        # Determine split indices
+        train_size = int(len(all_playlists) * TRAIN_RATIO)
+        val_size = int(len(all_playlists) * VAL_RATIO)
+        
+        train_playlists = all_playlists[:train_size]
+        val_playlists = all_playlists[train_size:train_size+val_size]
+        test_playlists = all_playlists[train_size+val_size:]
+        
+        logger.info(f"Split data: Train: {len(train_playlists)} playlists, Val: {len(val_playlists)} playlists, Test: {len(test_playlists)} playlists")
+        
+        # Create dataframes for each split
+        train_interactions = interactions_df[interactions_df['playlist_id'].isin(train_playlists)]
+        val_interactions = interactions_df[interactions_df['playlist_id'].isin(val_playlists)]
+        test_interactions = interactions_df[interactions_df['playlist_id'].isin(test_playlists)]
+        
+        logger.info(f"Training interactions: {len(train_interactions)}")
+        logger.info(f"Validation interactions: {len(val_interactions)}")
+        logger.info(f"Test interactions: {len(test_interactions)}")
+        
+        # Create ID mappings
+        unique_playlists = interactions_df['playlist_id'].unique()
+        unique_tracks = interactions_df['track_uri'].unique()
+        
+        playlist_to_idx = {playlist: i for i, playlist in enumerate(unique_playlists)}
+        track_to_idx = {track: i + len(unique_playlists) for i, track in enumerate(unique_tracks)}
         
         # Create reverse mappings
         idx_to_playlist = {i: playlist for playlist, i in playlist_to_idx.items()}
         idx_to_track = {i: track for track, i in track_to_idx.items()}
         
-        # Load any saved edge lists
-        temp_files = [f for f in os.listdir(OUTPUT_DIR) if f.startswith("lightgcn_edges_temp_") and f.endswith(".npy")]
-        if temp_files:
-            logger.info(f"Loading {len(temp_files)} saved edge lists")
-            for temp_file in temp_files:
-                temp_edges = np.load(os.path.join(OUTPUT_DIR, temp_file))
-                edge_list.extend(temp_edges.tolist())
-                os.remove(os.path.join(OUTPUT_DIR, temp_file))
+        # Process each split to create edge indices
+        train_edge_index = create_edge_index(train_interactions, playlist_to_idx, track_to_idx)
+        val_edge_index = create_edge_index(val_interactions, playlist_to_idx, track_to_idx)
+        test_edge_index = create_edge_index(test_interactions, playlist_to_idx, track_to_idx)
         
-        # Create edge index tensor
-        edge_index = torch.tensor(edge_list, dtype=torch.long).t().contiguous()
+        # Create graph data objects
+        train_data = Data(
+            edge_index=train_edge_index,
+            num_nodes=len(playlist_to_idx) + len(track_to_idx)
+        )
         
-        # Create graph data object with sparse representation
-        data = Data(
-            edge_index=edge_index,
+        val_data = Data(
+            edge_index=val_edge_index,
+            num_nodes=len(playlist_to_idx) + len(track_to_idx)
+        )
+        
+        test_data = Data(
+            edge_index=test_edge_index,
             num_nodes=len(playlist_to_idx) + len(track_to_idx)
         )
         
@@ -188,29 +223,48 @@ def load_playlist_data_in_chunks():
         num_tracks = len(track_to_idx)
         
         logger.info(f"Created graph with {num_playlists} playlists and {num_tracks} tracks")
-        logger.info(f"Total nodes: {num_playlists + num_tracks}, Edges: {edge_index.size(1)}")
+        logger.info(f"Train edges: {train_edge_index.size(1)}, Val edges: {val_edge_index.size(1)}, Test edges: {test_edge_index.size(1)}")
         
         # Free memory
-        del edge_list
+        del interactions_df, all_interactions
         gc.collect()
         
-        return data, playlist_to_idx, track_to_idx, idx_to_playlist, idx_to_track
+        return train_data, val_data, test_data, playlist_to_idx, track_to_idx, idx_to_playlist, idx_to_track
     
     except Exception as e:
-        logger.error(f"Error loading playlist data: {str(e)}")
+        logger.error(f"Error loading and splitting playlist data: {str(e)}")
         raise
 
-def train_lightgcn(data, num_users, num_items):
-    """Train LightGCN model on playlist-track interactions with memory optimization"""
+def create_edge_index(interactions_df, playlist_to_idx, track_to_idx):
+    """Create edge index from interactions dataframe"""
+    edge_list = []
+    
+    for _, row in interactions_df.iterrows():
+        playlist_idx = playlist_to_idx[row['playlist_id']]
+        track_idx = track_to_idx[row['track_uri']]
+        
+        # Add bidirectional edges
+        edge_list.append([playlist_idx, track_idx])
+        edge_list.append([track_idx, playlist_idx])
+    
+    return torch.tensor(edge_list, dtype=torch.long).t().contiguous()
+
+def train_lightgcn(train_data, val_data, playlist_to_idx, track_to_idx):
+    """Train LightGCN model on playlist-track interactions with validation"""
+    num_playlists = len(playlist_to_idx)
+    num_tracks = len(track_to_idx)
+    num_nodes = num_playlists + num_tracks
+    
     # Initialize model
     model = LightGCN(
-        num_nodes=num_users + num_items,
+        num_nodes=num_nodes,
         embedding_dim=EMBEDDING_DIM,
         num_layers=NUM_LAYERS
     ).to(DEVICE)
     
     # Move data to device
-    data = data.to(DEVICE)
+    train_data = train_data.to(DEVICE)
+    val_data = val_data.to(DEVICE)
     
     # Initialize optimizer
     optimizer = torch.optim.Adam(
@@ -223,27 +277,53 @@ def train_lightgcn(data, num_users, num_items):
     model.train()
     progress_bar = tqdm(range(EPOCHS), desc="Training LightGCN")
     
-    losses = []
+    best_val_loss = float('inf')
+    best_model_state = None
+    train_losses = []
+    val_losses = []
+    
     for epoch in progress_bar:
         # Forward pass
-        embeddings = model(data.edge_index)
+        embeddings = model(train_data.edge_index)
         
         # Calculate BPR loss (Bayesian Personalized Ranking)
-        loss = calculate_bpr_loss(embeddings, data.edge_index, num_users, num_items)
+        train_loss = calculate_bpr_loss(embeddings, train_data.edge_index, num_playlists, num_tracks)
         
         # Backward pass and optimize
         optimizer.zero_grad()
-        loss.backward()
+        train_loss.backward()
         optimizer.step()
         
-        losses.append(loss.item())
-        progress_bar.set_postfix({"loss": loss.item()})
+        train_losses.append(train_loss.item())
+        
+        # Validate
+        model.eval()
+        with torch.no_grad():
+            val_embeddings = model(val_data.edge_index)
+            val_loss = calculate_bpr_loss(val_embeddings, val_data.edge_index, num_playlists, num_tracks)
+            val_losses.append(val_loss.item())
+        
+        # Save best model
+        if val_loss.item() < best_val_loss:
+            best_val_loss = val_loss.item()
+            best_model_state = model.state_dict().copy()
+        
+        # Back to train mode
+        model.train()
+        
+        progress_bar.set_postfix({
+            "train_loss": train_loss.item(), 
+            "val_loss": val_loss.item()
+        })
         
         # Check memory periodically and clean up if needed
         if epoch % 10 == 0:
             check_memory_usage()
     
-    return model, losses
+    # Load best model
+    model.load_state_dict(best_model_state)
+    
+    return model, train_losses, val_losses, best_val_loss
 
 def calculate_bpr_loss(embeddings, edge_index, num_users, num_items):
     """Calculate Bayesian Personalized Ranking loss for LightGCN with memory optimization"""
@@ -278,6 +358,97 @@ def calculate_bpr_loss(embeddings, edge_index, num_users, num_items):
     loss = -torch.log(torch.sigmoid(pos_scores - neg_scores)).mean()
     
     return loss
+
+def evaluate_model(model, test_data, playlist_to_idx, track_to_idx):
+    """Evaluate the model using various metrics"""
+    model.eval()
+    num_playlists = len(playlist_to_idx)
+    num_tracks = len(track_to_idx)
+    
+    logger.info("Evaluating model on test set")
+    
+    # Group test edges by playlist
+    test_edges = test_data.edge_index.cpu().numpy()
+    playlist_to_tracks = {}
+    
+    # Only consider playlist->track edges
+    for i in range(test_edges.shape[1]):
+        src, dst = test_edges[0, i], test_edges[1, i]
+        if src < num_playlists and dst >= num_playlists:
+            playlist = src
+            track = dst
+            if playlist not in playlist_to_tracks:
+                playlist_to_tracks[playlist] = []
+            playlist_to_tracks[playlist].append(track)
+    
+    # Compute embeddings for all nodes
+    with torch.no_grad():
+        embeddings = model(test_data.edge_index.to(DEVICE)).cpu().numpy()
+    
+    # Setup metrics
+    precision_k = {k: [] for k in EVAL_TOP_K}
+    recall_k = {k: [] for k in EVAL_TOP_K}
+    ndcg_k = {k: [] for k in EVAL_TOP_K}
+    
+    # Calculate metrics with sampling to reduce memory usage
+    max_playlists_to_evaluate = min(5000, len(playlist_to_tracks))
+    sampled_playlists = np.random.choice(list(playlist_to_tracks.keys()), max_playlists_to_evaluate, replace=False)
+    
+    for i, playlist_idx in enumerate(tqdm(sampled_playlists, desc="Evaluating")):
+        # Skip playlists with too few tracks
+        if len(playlist_to_tracks[playlist_idx]) < 2:
+            continue
+        
+        # Get playlist embedding
+        playlist_emb = embeddings[playlist_idx]
+        
+        # Calculate scores for all tracks
+        track_scores = np.dot(embeddings[num_playlists:], playlist_emb)
+        
+        # Get ground truth tracks for this playlist
+        true_tracks = np.array(playlist_to_tracks[playlist_idx]) - num_playlists
+        
+        # Get top-k predictions
+        for k in EVAL_TOP_K:
+            top_k_tracks = np.argsort(-track_scores)[:k]
+            
+            # Calculate precision@k
+            relevant_tracks_in_k = np.isin(top_k_tracks, true_tracks).sum()
+            precision_k[k].append(relevant_tracks_in_k / k)
+            
+            # Calculate recall@k
+            recall_k[k].append(relevant_tracks_in_k / len(true_tracks))
+            
+            # Calculate NDCG@k
+            # Create binary relevance vector
+            y_true = np.zeros(len(track_scores))
+            y_true[true_tracks] = 1
+            
+            # Select top k predictions
+            top_k_indices = np.argsort(-track_scores)[:k]
+            y_score = np.zeros(len(track_scores))
+            y_score[top_k_indices] = 1
+            
+            # Calculate NDCG
+            try:
+                ndcg = ndcg_score(y_true.reshape(1, -1), y_score.reshape(1, -1), k=k)
+                ndcg_k[k].append(ndcg)
+            except:
+                # Skip if no relevant tracks
+                pass
+        
+        # Clean up memory periodically
+        if i % 100 == 0:
+            check_memory_usage()
+    
+    # Calculate average metrics
+    results = {}
+    for k in EVAL_TOP_K:
+        results[f'precision@{k}'] = np.mean(precision_k[k])
+        results[f'recall@{k}'] = np.mean(recall_k[k])
+        results[f'ndcg@{k}'] = np.mean(ndcg_k[k])
+    
+    return results
 
 def extract_track_embeddings_in_batches(model, data, track_to_idx, num_playlists):
     """Extract track embeddings in batches to reduce memory usage"""
@@ -322,10 +493,21 @@ def main():
     # Configure MLflow
     configure_mlflow()
     
-    # Load playlist data in chunks
-    data, playlist_to_idx, track_to_idx, idx_to_playlist, idx_to_track = load_playlist_data_in_chunks()
+    # Load playlist data in chunks with train/val/test split
+    train_data, val_data, test_data, playlist_to_idx, track_to_idx, idx_to_playlist, idx_to_track = load_playlist_data_in_chunks()
     num_playlists = len(playlist_to_idx)
     num_tracks = len(track_to_idx)
+    
+    # Save split information for consistency across models
+    split_info = {
+        'train_playlists': list(set([idx_to_playlist[idx.item()] for idx in train_data.edge_index[0] if idx.item() < num_playlists])),
+        'val_playlists': list(set([idx_to_playlist[idx.item()] for idx in val_data.edge_index[0] if idx.item() < num_playlists])),
+        'test_playlists': list(set([idx_to_playlist[idx.item()] for idx in test_data.edge_index[0] if idx.item() < num_playlists]))
+    }
+    split_info_file = os.path.join(OUTPUT_DIR, "playlist_split_info.json")
+    with open(split_info_file, 'w') as f:
+        json.dump(split_info, f)
+    logger.info(f"Saved playlist split information to {split_info_file}")
     
     # Check if BERT info is available
     bert_run_id = None
@@ -352,6 +534,10 @@ def main():
             "memory_limit_percent": MEMORY_LIMIT_PERCENT,
             "num_playlists": num_playlists,
             "num_tracks": num_tracks,
+            "train_ratio": TRAIN_RATIO,
+            "val_ratio": VAL_RATIO,
+            "test_ratio": TEST_RATIO,
+            "eval_top_k": EVAL_TOP_K,
             "device": str(DEVICE)
         }
         
@@ -362,11 +548,19 @@ def main():
         
         # Train model
         logger.info("Training LightGCN model...")
-        model, losses = train_lightgcn(data, num_playlists, num_tracks)
+        model, train_losses, val_losses, best_val_loss = train_lightgcn(train_data, val_data, playlist_to_idx, track_to_idx)
+        
+        # Evaluate model
+        logger.info("Evaluating model on test set...")
+        eval_results = evaluate_model(model, test_data, playlist_to_idx, track_to_idx)
+        
+        # Save evaluation results
+        with open(EVAL_RESULTS_PATH, 'w') as f:
+            json.dump(eval_results, f, indent=2)
         
         # Extract track embeddings in batches
         logger.info("Extracting track embeddings...")
-        track_embeddings_dict = extract_track_embeddings_in_batches(model, data, track_to_idx, num_playlists)
+        track_embeddings_dict = extract_track_embeddings_in_batches(model, train_data, track_to_idx, num_playlists)
         
         logger.info(f"Saving {len(track_embeddings_dict)} track embeddings to {OUTPUT_NPZ_PATH}")
         np.savez(OUTPUT_NPZ_PATH, **track_embeddings_dict)
@@ -399,14 +593,21 @@ def main():
         mlflow.log_artifact(MODEL_PATH, "model")
         mlflow.log_artifact(playlist_map_path, "mappings")
         mlflow.log_artifact(track_map_path, "mappings")
+        mlflow.log_artifact(EVAL_RESULTS_PATH, "evaluation")
         
         # Log metrics
-        train_losses = np.array(losses)
-        mlflow.log_metric("final_loss", losses[-1])
-        mlflow.log_metric("min_loss", np.min(train_losses))
+        # 1. Training metrics
+        for i, (train_loss, val_loss) in enumerate(zip(train_losses, val_losses)):
+            mlflow.log_metric("train_loss", train_loss, step=i)
+            mlflow.log_metric("val_loss", val_loss, step=i)
         
-        for i, loss in enumerate(losses):
-            mlflow.log_metric("train_loss", loss, step=i)
+        mlflow.log_metric("final_train_loss", train_losses[-1])
+        mlflow.log_metric("final_val_loss", val_losses[-1])
+        mlflow.log_metric("best_val_loss", best_val_loss)
+        
+        # 2. Evaluation metrics
+        for metric_name, value in eval_results.items():
+            mlflow.log_metric(metric_name, value)
         
         # Log completion time
         end_time = time.time()
@@ -416,6 +617,10 @@ def main():
         logger.info(f"LightGCN training completed in {duration:.2f} seconds")
         logger.info(f"Final memory usage: {check_memory_usage():.1f}%")
         
+        # Log evaluation results
+        for metric, value in eval_results.items():
+            logger.info(f"{metric}: {value:.4f}")
+        
         # Write model info for next steps
         model_info = {
             "lightgcn_run_id": run_id,
@@ -423,7 +628,9 @@ def main():
             "model_file": MODEL_PATH,
             "embedding_dim": EMBEDDING_DIM,
             "num_tracks": num_tracks,
-            "num_playlists": num_playlists
+            "num_playlists": num_playlists,
+            "evaluation": eval_results,
+            "split_info_file": split_info_file
         }
         
         if bert_run_id:

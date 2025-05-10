@@ -1,11 +1,11 @@
 version: "3.8"
 
 services:
-  bert-trainer:
+  bert-encoder:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: bert-trainer
+    container_name: bert-encoder
     volumes:
       - ${BLOCK_STORAGE_MOUNT:-/mnt/block}:${BLOCK_STORAGE_MOUNT:-/mnt/block}
       - ./outputs:/app/outputs
@@ -19,7 +19,7 @@ services:
       OUTPUT_DIR: /app/outputs
       LOG_DIR: /app/logs
       RUN_ID: ${RUN_ID:-$(date +%Y%m%d%H%M%S)}
-    command: ["python", "bert_train.py"]
+    command: ["python", "bert_encoding.py"]
     restart: on-failure
     deploy:
       resources:
@@ -49,7 +49,7 @@ services:
       RUN_ID: ${RUN_ID:-$(date +%Y%m%d%H%M%S)}
     command: ["python", "lightgcn_train.py"]
     depends_on:
-      - bert-trainer
+      - bert-encoder
     restart: on-failure
     deploy:
       resources:
