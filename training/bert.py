@@ -9,17 +9,17 @@ from transformers import DistilBertTokenizer, DistilBertModel
 from tqdm import tqdm
 
 # ---- CONFIG SECTION ---- #
-MLFLOW_TRACKING_URI = os.environ.get("MLFLOW_TRACKING_URI", "http://localhost:8000")
-MLFLOW_S3_ENDPOINT_URL = os.environ.get("MLFLOW_S3_ENDPOINT_URL", "http://localhost:9000")
-AWS_ACCESS_KEY_ID = os.environ.get("AWS_ACCESS_KEY_ID", "minio")
-AWS_SECRET_ACCESS_KEY = os.environ.get("AWS_SECRET_ACCESS_KEY", "minio123")
+MLFLOW_TRACKING_URI = os.environ.get("MLFLOW_TRACKING_URI", "http://129.114.25.37:8000/")
+MLFLOW_S3_ENDPOINT_URL = os.environ.get("MLFLOW_S3_ENDPOINT_URL", "http://129.114.25.37:9000")
+AWS_ACCESS_KEY_ID = os.environ.get("AWS_ACCESS_KEY_ID", "admin")
+AWS_SECRET_ACCESS_KEY = os.environ.get("AWS_SECRET_ACCESS_KEY", "XCqPacaUHUur82cNZI1R")
 EXPERIMENT_NAME = "bert-track-embeddings"
 
 # Data paths
-DATA_DIR = os.environ.get("PLAYLIST_DATA_DIR", "./data")
-TRACK_JSON_PATH = os.path.join(DATA_DIR, "track_text.json")  # JSON file with track information
-OUTPUT_NPZ_PATH = "./outputs/bert_track_embeddings.npz"
-MODEL_PATH = "./outputs/bert_encoder_model.pt"
+DATA_DIR = os.environ.get("PLAYLIST_DATA_DIR", "/mnt/block/processed")
+TRACK_JSON_PATH = os.path.join(DATA_DIR, "track_texts.json")  # JSON file with track information
+OUTPUT_NPZ_PATH = "/mnt/block/outputs/bert_track_embeddings.npz"
+MODEL_PATH = "/mnt/block/models/bert_encoder_model.pt"
 
 # Model parameters
 MAX_LEN = 128
