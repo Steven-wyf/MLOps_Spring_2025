@@ -9,7 +9,7 @@ export MLFLOW_URI=${MLFLOW_URI:-"http://localhost:8000"}
 export MINIO_URI=${MINIO_URI:-"http://localhost:9000"}
 export MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY:-"minioadmin"}
 export MINIO_SECRET_KEY=${MINIO_SECRET_KEY:-"minioadmin"}
-export BLOCK_STORAGE_MOUNT=${BLOCK_STORAGE_MOUNT:-"/mnt/block"}
+export BLOCK_STORAGE_MOUNT=${BLOCK_STORAGE_MOUNT:-"/mnt/object"}
 export RUN_ID=$(date +%Y%m%d%H%M%S)
 
 # Memory optimization parameters

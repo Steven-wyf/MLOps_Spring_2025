@@ -18,10 +18,10 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Create output and log directories
-RUN mkdir -p /mnt/block/outputs /mnt/block/logs
+RUN mkdir -p /mnt/object/outputs /mnt/object/logs
 
 # Set volume mount points
-VOLUME ["/mnt/block/outputs", "/mnt/block/logs"]
+VOLUME ["/mnt/object/outputs", "/mnt/object/logs"]
 
 # Copy training scripts
 COPY *.py ./

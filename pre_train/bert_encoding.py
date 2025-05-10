@@ -14,9 +14,9 @@ MLFLOW_TRACKING_URI = os.environ.get("MLFLOW_TRACKING_URI", "http://129.114.25.3
 EXPERIMENT_NAME = "bert-track-encoding"
 
 # Data paths
-DATA_DIR = os.environ.get("PLAYLIST_DATA_DIR", "/mnt/block")
-TRACK_TEXT_PATH = os.path.join(DATA_DIR, "processed/track_texts.json")
-OUTPUT_DIR = os.environ.get("OUTPUT_DIR", "/mnt/block/outputs")
+DATA_DIR = os.environ.get("PLAYLIST_DATA_DIR", "/mnt/object")
+TRACK_TEXT_PATH = os.path.join(DATA_DIR, "processed_data/track_texts.json")
+OUTPUT_DIR = os.environ.get("OUTPUT_DIR", "/mnt/object/outputs")
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 OUTPUT_NPZ_PATH = os.path.join(OUTPUT_DIR, "bert_track_embeddings.npz")
 

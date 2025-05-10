@@ -18,7 +18,7 @@ MLFLOW_S3_ENDPOINT_URL = os.environ.get("MLFLOW_S3_ENDPOINT_URL", "http://129.11
 AWS_ACCESS_KEY_ID = os.environ.get("AWS_ACCESS_KEY_ID", "admin")
 AWS_SECRET_ACCESS_KEY = os.environ.get("AWS_SECRET_ACCESS_KEY", "XCqPacaUHUur82cNZI1R")
 EXPERIMENT_NAME = "mlp-projector"
-OUTPUT_DIR = os.environ.get("OUTPUT_DIR", "/mnt/block/outputs")
+OUTPUT_DIR = os.environ.get("OUTPUT_DIR", "/mnt/object/outputs")
 
 # Configure MLflow
 os.environ["MLFLOW_S3_ENDPOINT_URL"] = MLFLOW_S3_ENDPOINT_URL

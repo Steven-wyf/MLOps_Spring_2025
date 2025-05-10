@@ -22,7 +22,7 @@ MLFLOW_S3_ENDPOINT_URL = os.environ.get("MLFLOW_S3_ENDPOINT_URL", "http://129.11
 AWS_ACCESS_KEY_ID = os.environ.get("AWS_ACCESS_KEY_ID", "admin")
 AWS_SECRET_ACCESS_KEY = os.environ.get("AWS_SECRET_ACCESS_KEY", "XCqPacaUHUur82cNZI1R")
 EXPERIMENT_NAME = "matrix-factorization"
-OUTPUT_DIR = os.environ.get("OUTPUT_DIR", "/mnt/block/outputs")
+OUTPUT_DIR = os.environ.get("OUTPUT_DIR", "/mnt/object/outputs")
 EMBEDDINGS_PATH = os.path.join(OUTPUT_DIR, "mf_embeddings.npz")
 
 # Configure MLflow
@@ -49,7 +49,7 @@ class MatrixFactorization(nn.Module):
         return torch.sum(user_emb * item_emb, dim=1)
 
 # Load and preprocess data
-df = pd.read_csv('/mnt/block/playlist_track_pairs.csv')
+df = pd.read_csv('/mnt/object/processed_data/playlist_track_pairs.csv')
 user_encoder = LabelEncoder()
 item_encoder = LabelEncoder()
 

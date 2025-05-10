@@ -6,10 +6,10 @@ set -e
 
 # Default values
 MAIN_NODE_IP=${MAIN_NODE_IP:-"129.114.25.37"}
-BLOCK_PATH=${BLOCK_PATH:-"/mnt/block"}
+BLOCK_PATH=${BLOCK_PATH:-"/mnt/object"}
 SSH_KEY=${SSH_KEY:-"~/.ssh/project_key"}
 SSH_USER=${SSH_USER:-"cc"}
-MOUNT_POINT=${MOUNT_POINT:-"/mnt/block"}
+MOUNT_POINT=${MOUNT_POINT:-"/mnt/object"}
 
 # Print usage information
 function show_usage {

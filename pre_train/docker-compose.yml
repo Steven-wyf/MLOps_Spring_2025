@@ -7,7 +7,7 @@ services:
       dockerfile: Dockerfile
     container_name: bert-encoder
     volumes:
-      - /mnt/block:/mnt/block
+      - /mnt/object:/mnt/object
       - ./outputs:/app/outputs
       - ./logs:/app/logs
     environment:
@@ -15,7 +15,7 @@ services:
       MLFLOW_S3_ENDPOINT_URL: http://129.114.25.37:9000
       AWS_ACCESS_KEY_ID: admin
       AWS_SECRET_ACCESS_KEY: XCqPacaUHUur82cNZI1R
-      PLAYLIST_DATA_DIR: /mnt/block
+      PLAYLIST_DATA_DIR: /mnt/object
       OUTPUT_DIR: /app/outputs
       LOG_DIR: /app/logs
       RUN_ID: ${RUN_ID:-$(date +%Y%m%d%H%M%S)}
@@ -35,7 +35,7 @@ services:
       dockerfile: Dockerfile
     container_name: matrix-factorization
     volumes:
-      - /mnt/block:/mnt/block
+      - /mnt/object:/mnt/object
       - ./outputs:/app/outputs
       - ./logs:/app/logs
     environment:
@@ -43,7 +43,7 @@ services:
       MLFLOW_S3_ENDPOINT_URL: http://129.114.25.37:9000
       AWS_ACCESS_KEY_ID: admin
       AWS_SECRET_ACCESS_KEY: XCqPacaUHUur82cNZI1R
-      PLAYLIST_DATA_DIR: /mnt/block
+      PLAYLIST_DATA_DIR: /mnt/object
       OUTPUT_DIR: /app/outputs
       LOG_DIR: /app/logs
       RUN_ID: ${RUN_ID:-$(date +%Y%m%d%H%M%S)}
@@ -65,7 +65,7 @@ services:
       dockerfile: Dockerfile
     container_name: mlp-trainer
     volumes:
-      - /mnt/block:/mnt/block
+      - /mnt/object:/mnt/object
       - ./outputs:/app/outputs
       - ./logs:/app/logs
     environment:
@@ -73,7 +73,7 @@ services:
       MLFLOW_S3_ENDPOINT_URL: http://129.114.25.37:9000
       AWS_ACCESS_KEY_ID: admin
       AWS_SECRET_ACCESS_KEY: XCqPacaUHUur82cNZI1R
-      PLAYLIST_DATA_DIR: /mnt/block
+      PLAYLIST_DATA_DIR: /mnt/object
       OUTPUT_DIR: /app/outputs
       LOG_DIR: /app/logs
       RUN_ID: ${RUN_ID:-$(date +%Y%m%d%H%M%S)}
@@ -95,7 +95,7 @@ services:
       dockerfile: Dockerfile
     container_name: llara-trainer
     volumes:
-      - /mnt/block:/mnt/block
+      - /mnt/object:/mnt/object
       - ./outputs:/app/outputs
       - ./logs:/app/logs
     environment:
@@ -103,7 +103,7 @@ services:
       MLFLOW_S3_ENDPOINT_URL: http://129.114.25.37:9000
       AWS_ACCESS_KEY_ID: admin
       AWS_SECRET_ACCESS_KEY: XCqPacaUHUur82cNZI1R
-      PLAYLIST_DATA_DIR: /mnt/block
+      PLAYLIST_DATA_DIR: /mnt/object
       OUTPUT_DIR: /app/outputs
       LOG_DIR: /app/logs
       RUN_ID: ${RUN_ID:-$(date +%Y%m%d%H%M%S)}
