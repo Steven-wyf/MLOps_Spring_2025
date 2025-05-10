@@ -144,19 +144,32 @@ with mlflow.start_run() as run:
     # Generate negative samples for evaluation
     eval_df = generate_negative_samples_for_test(test_df, num_users, num_items, num_negatives=5)
     
-    # Prepare evaluation data
-    user_ids = torch.tensor(eval_df["user_id"].values, dtype=torch.long).to(device)
-    item_ids = torch.tensor(eval_df["item_id"].values, dtype=torch.long).to(device)
-    labels = torch.tensor(eval_df["label"].values, dtype=torch.float32).to(device)
+    # Batch evaluation
+    eval_batch_size = 1024  # Can be adjusted based on available memory
+    all_preds = []
+    all_labels = []
+    
+    for i in tqdm(range(0, len(eval_df), eval_batch_size), desc="Evaluating"):
+        batch = eval_df.iloc[i:i+eval_batch_size]
+        
+        # Prepare batch data
+        user_ids = torch.tensor(batch["user_id"].values, dtype=torch.long).to(device)
+        item_ids = torch.tensor(batch["item_id"].values, dtype=torch.long).to(device)
+        labels = torch.tensor(batch["label"].values, dtype=torch.float32).to(device)
 
-    # Get predictions
-    with torch.no_grad():
-        preds = model(user_ids, item_ids)
+        # Get predictions
+        with torch.no_grad():
+            preds = model(user_ids, item_ids)
+        
+        # Store predictions and labels
+        all_preds.append(preds.cpu().numpy())
+        all_labels.append(labels.cpu().numpy())
+    
+    # Concatenate all batches
+    preds_np = np.concatenate(all_preds)
+    labels_np = np.concatenate(all_labels)
 
     # Calculate metrics
-    preds_np = preds.cpu().numpy()
-    labels_np = labels.cpu().numpy()
-
     rmse = np.sqrt(mean_squared_error(labels_np, preds_np))
     avg_prec = average_precision_score(labels_np, preds_np)
 

@@ -29,11 +29,11 @@ services:
               count: 1
               capabilities: [gpu]
 
-  lightgcn-trainer:
+  matrix-factorization:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: lightgcn-trainer
+    container_name: matrix-factorization
     volumes:
       - ${BLOCK_STORAGE_MOUNT:-/mnt/block}:${BLOCK_STORAGE_MOUNT:-/mnt/block}
       - ./outputs:/app/outputs
@@ -47,7 +47,7 @@ services:
       OUTPUT_DIR: /app/outputs
       LOG_DIR: /app/logs
       RUN_ID: ${RUN_ID:-$(date +%Y%m%d%H%M%S)}
-    command: ["python", "lightgcn_train.py"]
+    command: ["python", "matrix_factorization.py"]
     depends_on:
       - bert-encoder
     restart: on-failure
@@ -79,7 +79,7 @@ services:
       RUN_ID: ${RUN_ID:-$(date +%Y%m%d%H%M%S)}
     command: ["python", "mlp_train.py"]
     depends_on:
-      - lightgcn-trainer
+      - matrix-factorization
     restart: on-failure
     deploy:
       resources:
