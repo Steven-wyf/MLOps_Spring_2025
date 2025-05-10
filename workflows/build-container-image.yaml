@@ -60,7 +60,7 @@ spec:
 
           while [ $i -le $MAX_RETRIES ]; do
             echo "Attempt $i of $MAX_RETRIES: Cloning repo..."
-            git clone --branch workflow https://github.com/Steven-wyf/MLOps_Spring_2025.git /mnt/workspace && break
+            git clone https://github.com/Steven-wyf/MLOps_Spring_2025.git /mnt/workspace && break
             echo "Git clone failed. Retrying in 5 seconds..."
             i=$((i + 1))
             sleep 5
