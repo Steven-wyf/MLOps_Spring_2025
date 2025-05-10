@@ -5,6 +5,7 @@ import torch.nn as nn
 import torch.optim as optim
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
+from sklearn.metrics import mean_squared_error, average_precision_score
 import mlflow
 import os
 import logging
@@ -63,8 +64,8 @@ num_users = len(user_encoder.classes_)
 num_items = len(item_encoder.classes_)
 embedding_dim = 32
 learning_rate = 0.001
-epochs = 50
-batch_size = 1024
+epochs = 10
+batch_size = 256
 
 # Initialize model and optimizer
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -115,10 +116,69 @@ with mlflow.start_run() as run:
         mlflow.log_metric("loss", avg_loss, step=epoch)
         logger.info(f"Epoch {epoch+1}/{epochs}, Loss: {avg_loss:.4f}")
     
+    # Evaluation
+    logger.info("Starting evaluation...")
+    model.eval()
+    
+    def generate_negative_samples_for_test(df, num_users, num_items, num_negatives=5, seed=42):
+        np.random.seed(seed)
+        user_item_set = set(zip(df['user_id'], df['item_id']))
+        all_items = set(range(num_items))
+        positives, negatives = [], []
+
+        for user in df['user_id'].unique():
+            user_pos_items = set(df[df['user_id'] == user]['item_id'])
+            positives.extend([(user, item, 1.0) for item in user_pos_items])
+
+            available_neg_items = list(all_items - user_pos_items)
+            if len(available_neg_items) >= num_negatives:
+                sampled_neg_items = np.random.choice(available_neg_items, size=num_negatives, replace=True)
+            else:
+                sampled_neg_items = available_neg_items
+
+            negatives.extend([(user, item, 0.0) for item in sampled_neg_items])
+
+        test_full = pd.DataFrame(positives + negatives, columns=["user_id", "item_id", "label"])
+        return test_full.sample(frac=1.0, random_state=seed).reset_index(drop=True)
+
+    # Generate negative samples for evaluation
+    eval_df = generate_negative_samples_for_test(test_df, num_users, num_items, num_negatives=5)
+    
+    # Prepare evaluation data
+    user_ids = torch.tensor(eval_df["user_id"].values, dtype=torch.long).to(device)
+    item_ids = torch.tensor(eval_df["item_id"].values, dtype=torch.long).to(device)
+    labels = torch.tensor(eval_df["label"].values, dtype=torch.float32).to(device)
+
+    # Get predictions
+    with torch.no_grad():
+        preds = model(user_ids, item_ids)
+
+    # Calculate metrics
+    preds_np = preds.cpu().numpy()
+    labels_np = labels.cpu().numpy()
+
+    rmse = np.sqrt(mean_squared_error(labels_np, preds_np))
+    avg_prec = average_precision_score(labels_np, preds_np)
+
+    # Log evaluation metrics
+    mlflow.log_metrics({
+        "test_rmse": rmse,
+        "test_avg_precision": avg_prec
+    })
+
+    # Print evaluation results
+    logger.info(f"Test RMSE: {rmse:.4f}")
+    logger.info(f"Test Average Precision: {avg_prec:.4f}")
+    
     # Save model to MinIO through MLflow
     with tempfile.TemporaryDirectory() as tmp_dir:
         model_path = os.path.join(tmp_dir, "mf_model.pt")
-        torch.save(model.state_dict(), model_path)
+        torch.save({
+            "model_state": model.state_dict(),
+            "num_users": num_users,
+            "num_items": num_items,
+            "embedding_dim": embedding_dim
+        }, model_path)
         mlflow.log_artifact(model_path, "models")
         logger.info(f"Model saved to MinIO through MLflow run {run.info.run_id}")
     
@@ -133,8 +193,8 @@ with mlflow.start_run() as run:
         EMBEDDINGS_PATH,
         user_embeddings=user_embeddings,
         item_embeddings=item_embeddings,
-        user_mapping={str(k): v for k, v in user_encoder.classes_.items()},
-        item_mapping={str(k): v for k, v in item_encoder.classes_.items()}
+        user_mapping=dict(enumerate(user_encoder.classes_)),
+        item_mapping=dict(enumerate(item_encoder.classes_))
     )
     mlflow.log_artifact(EMBEDDINGS_PATH, "embeddings")
     
@@ -143,8 +203,10 @@ with mlflow.start_run() as run:
         "num_users": num_users,
         "num_items": num_items,
         "embedding_dim": embedding_dim,
-        "mlflow_run_id": run.info.run_id
+        "mlflow_run_id": run.info.run_id,
+        "test_rmse": float(rmse),
+        "test_avg_precision": float(avg_prec)
     }
     mlflow.log_dict(model_info, "model_info.json")
 
-logger.info("Training completed successfully!") 
+logger.info("Training and evaluation completed successfully!") 
