@@ -120,50 +120,31 @@ with mlflow.start_run() as run:
     logger.info("Starting evaluation...")
     model.eval()
     
-    def generate_negative_samples_for_test(df, num_users, num_items, num_negatives=5, seed=42):
-        np.random.seed(seed)
-        user_item_set = set(zip(df['user_id'], df['item_id']))
-        all_items = set(range(num_items))
-        positives, negatives = [], []
-
-        for user in df['user_id'].unique():
-            user_pos_items = set(df[df['user_id'] == user]['item_id'])
-            positives.extend([(user, item, 1.0) for item in user_pos_items])
-
-            available_neg_items = list(all_items - user_pos_items)
-            if len(available_neg_items) >= num_negatives:
-                sampled_neg_items = np.random.choice(available_neg_items, size=num_negatives, replace=True)
-            else:
-                sampled_neg_items = available_neg_items
-
-            negatives.extend([(user, item, 0.0) for item in sampled_neg_items])
-
-        test_full = pd.DataFrame(positives + negatives, columns=["user_id", "item_id", "label"])
-        return test_full.sample(frac=1.0, random_state=seed).reset_index(drop=True)
-
-    # Generate negative samples for evaluation
-    eval_df = generate_negative_samples_for_test(test_df, num_users, num_items, num_negatives=5)
+    # Use only positive interactions for evaluation
+    eval_df = test_df.copy()
     
+    # Prepare evaluation data
+    user_ids = torch.tensor(eval_df["user_id"].values, dtype=torch.long).to(device)
+    item_ids = torch.tensor(eval_df["item_id"].values, dtype=torch.long).to(device)
+    labels = torch.ones(len(eval_df), dtype=torch.float32).to(device)  # All positive interactions
+
     # Batch evaluation
     eval_batch_size = 1024  # Can be adjusted based on available memory
     all_preds = []
     all_labels = []
     
     for i in tqdm(range(0, len(eval_df), eval_batch_size), desc="Evaluating"):
-        batch = eval_df.iloc[i:i+eval_batch_size]
-        
-        # Prepare batch data
-        user_ids = torch.tensor(batch["user_id"].values, dtype=torch.long).to(device)
-        item_ids = torch.tensor(batch["item_id"].values, dtype=torch.long).to(device)
-        labels = torch.tensor(batch["label"].values, dtype=torch.float32).to(device)
+        batch_user_ids = user_ids[i:i+eval_batch_size]
+        batch_item_ids = item_ids[i:i+eval_batch_size]
+        batch_labels = labels[i:i+eval_batch_size]
 
         # Get predictions
         with torch.no_grad():
-            preds = model(user_ids, item_ids)
+            preds = model(batch_user_ids, batch_item_ids)
         
         # Store predictions and labels
         all_preds.append(preds.cpu().numpy())
-        all_labels.append(labels.cpu().numpy())
+        all_labels.append(batch_labels.cpu().numpy())
     
     # Concatenate all batches
     preds_np = np.concatenate(all_preds)
