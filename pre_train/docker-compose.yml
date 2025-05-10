@@ -7,15 +7,15 @@ services:
       dockerfile: Dockerfile
     container_name: bert-encoder
     volumes:
-      - ${BLOCK_STORAGE_MOUNT:-/mnt/block}:${BLOCK_STORAGE_MOUNT:-/mnt/block}
+      - /mnt/block:/mnt/block
       - ./outputs:/app/outputs
       - ./logs:/app/logs
     environment:
-      MLFLOW_TRACKING_URI: ${MLFLOW_URI:-http://mlflow:8000}
-      MLFLOW_S3_ENDPOINT_URL: ${MINIO_URI:-http://minio:9000}
-      AWS_ACCESS_KEY_ID: ${MINIO_ACCESS_KEY:-minioadmin}
-      AWS_SECRET_ACCESS_KEY: ${MINIO_SECRET_KEY:-minioadmin}
-      PLAYLIST_DATA_DIR: ${BLOCK_STORAGE_MOUNT:-/mnt/block}
+      MLFLOW_TRACKING_URI: http://129.114.25.37:8000
+      MLFLOW_S3_ENDPOINT_URL: http://129.114.25.37:9000
+      AWS_ACCESS_KEY_ID: admin
+      AWS_SECRET_ACCESS_KEY: CqPacaUHUur82cNZI1R
+      PLAYLIST_DATA_DIR: /mnt/block
       OUTPUT_DIR: /app/outputs
       LOG_DIR: /app/logs
       RUN_ID: ${RUN_ID:-$(date +%Y%m%d%H%M%S)}
@@ -35,15 +35,15 @@ services:
       dockerfile: Dockerfile
     container_name: matrix-factorization
     volumes:
-      - ${BLOCK_STORAGE_MOUNT:-/mnt/block}:${BLOCK_STORAGE_MOUNT:-/mnt/block}
+      - /mnt/block:/mnt/block
       - ./outputs:/app/outputs
       - ./logs:/app/logs
     environment:
-      MLFLOW_TRACKING_URI: ${MLFLOW_URI:-http://mlflow:8000}
-      MLFLOW_S3_ENDPOINT_URL: ${MINIO_URI:-http://minio:9000}
-      AWS_ACCESS_KEY_ID: ${MINIO_ACCESS_KEY:-minioadmin}
-      AWS_SECRET_ACCESS_KEY: ${MINIO_SECRET_KEY:-minioadmin}
-      PLAYLIST_DATA_DIR: ${BLOCK_STORAGE_MOUNT:-/mnt/block}
+      MLFLOW_TRACKING_URI: http://129.114.25.37:8000
+      MLFLOW_S3_ENDPOINT_URL: http://129.114.25.37:9000
+      AWS_ACCESS_KEY_ID: admin
+      AWS_SECRET_ACCESS_KEY: CqPacaUHUur82cNZI1R
+      PLAYLIST_DATA_DIR: /mnt/block
       OUTPUT_DIR: /app/outputs
       LOG_DIR: /app/logs
       RUN_ID: ${RUN_ID:-$(date +%Y%m%d%H%M%S)}
@@ -59,65 +59,65 @@ services:
               count: 1
               capabilities: [gpu]
 
-  mlp-trainer:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: mlp-trainer
-    volumes:
-      - ${BLOCK_STORAGE_MOUNT:-/mnt/block}:${BLOCK_STORAGE_MOUNT:-/mnt/block}
-      - ./outputs:/app/outputs
-      - ./logs:/app/logs
-    environment:
-      MLFLOW_TRACKING_URI: ${MLFLOW_URI:-http://mlflow:8000}
-      MLFLOW_S3_ENDPOINT_URL: ${MINIO_URI:-http://minio:9000}
-      AWS_ACCESS_KEY_ID: ${MINIO_ACCESS_KEY:-minioadmin}
-      AWS_SECRET_ACCESS_KEY: ${MINIO_SECRET_KEY:-minioadmin}
-      PLAYLIST_DATA_DIR: ${BLOCK_STORAGE_MOUNT:-/mnt/block}
-      OUTPUT_DIR: /app/outputs
-      LOG_DIR: /app/logs
-      RUN_ID: ${RUN_ID:-$(date +%Y%m%d%H%M%S)}
-    command: ["python", "mlp_train.py"]
-    depends_on:
-      - matrix-factorization
-    restart: on-failure
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
+  # mlp-trainer:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile
+  #   container_name: mlp-trainer
+  #   volumes:
+  #     - /mnt/block:/mnt/block
+  #     - ./outputs:/app/outputs
+  #     - ./logs:/app/logs
+  #   environment:
+  #     MLFLOW_TRACKING_URI: http://129.114.25.37:8000
+  #     MLFLOW_S3_ENDPOINT_URL: http://129.114.25.37:9000
+  #     AWS_ACCESS_KEY_ID: admin
+  #     AWS_SECRET_ACCESS_KEY: CqPacaUHUur82cNZI1R
+  #     PLAYLIST_DATA_DIR: /mnt/block
+  #     OUTPUT_DIR: /app/outputs
+  #     LOG_DIR: /app/logs
+  #     RUN_ID: ${RUN_ID:-$(date +%Y%m%d%H%M%S)}
+  #   command: ["python", "mlp_train.py"]
+  #   depends_on:
+  #     - matrix-factorization
+  #   restart: on-failure
+  #   deploy:
+  #     resources:
+  #       reservations:
+  #         devices:
+  #           - driver: nvidia
+  #             count: 1
+  #             capabilities: [gpu]
 
-  llara-trainer:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: llara-trainer
-    volumes:
-      - ${BLOCK_STORAGE_MOUNT:-/mnt/block}:${BLOCK_STORAGE_MOUNT:-/mnt/block}
-      - ./outputs:/app/outputs
-      - ./logs:/app/logs
-    environment:
-      MLFLOW_TRACKING_URI: ${MLFLOW_URI:-http://mlflow:8000}
-      MLFLOW_S3_ENDPOINT_URL: ${MINIO_URI:-http://minio:9000}
-      AWS_ACCESS_KEY_ID: ${MINIO_ACCESS_KEY:-minioadmin}
-      AWS_SECRET_ACCESS_KEY: ${MINIO_SECRET_KEY:-minioadmin}
-      PLAYLIST_DATA_DIR: ${BLOCK_STORAGE_MOUNT:-/mnt/block}
-      OUTPUT_DIR: /app/outputs
-      LOG_DIR: /app/logs
-      RUN_ID: ${RUN_ID:-$(date +%Y%m%d%H%M%S)}
-    command: ["python", "llara_train.py"]
-    depends_on:
-      - mlp-trainer
-    restart: on-failure
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
+  # llara-trainer:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile
+  #   container_name: llara-trainer
+  #   volumes:
+  #     - /mnt/block:/mnt/block
+  #     - ./outputs:/app/outputs
+  #     - ./logs:/app/logs
+  #   environment:
+  #     MLFLOW_TRACKING_URI: http://129.114.25.37:8000
+  #     MLFLOW_S3_ENDPOINT_URL: http://129.114.25.37:9000
+  #     AWS_ACCESS_KEY_ID: admin
+  #     AWS_SECRET_ACCESS_KEY: CqPacaUHUur82cNZI1R
+  #     PLAYLIST_DATA_DIR: /mnt/block
+  #     OUTPUT_DIR: /app/outputs
+  #     LOG_DIR: /app/logs
+  #     RUN_ID: ${RUN_ID:-$(date +%Y%m%d%H%M%S)}
+  #   command: ["python", "llara_train.py"]
+  #   depends_on:
+  #     - mlp-trainer
+  #   restart: on-failure
+  #   deploy:
+  #     resources:
+  #       reservations:
+  #         devices:
+  #           - driver: nvidia
+  #             count: 1
+  #             capabilities: [gpu]
 
 networks:
   default:
