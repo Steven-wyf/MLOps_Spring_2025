@@ -7,6 +7,7 @@ import mlflow
 import os
 import logging
 import tempfile
+from typing import Tuple, Dict
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -16,9 +17,8 @@ logger = logging.getLogger(__name__)
 MLFLOW_TRACKING_URI = os.environ.get("MLFLOW_TRACKING_URI", "http://129.114.25.37:8000/")
 MLFLOW_S3_ENDPOINT_URL = os.environ.get("MLFLOW_S3_ENDPOINT_URL", "http://129.114.25.37:9000")
 AWS_ACCESS_KEY_ID = os.environ.get("AWS_ACCESS_KEY_ID", "admin")
-AWS_SECRET_ACCESS_KEY = os.environ.get("AWS_SECRET_ACCESS_KEY", "XCqPacaUHUur82cNZI1R")
+AWS_SECRET_ACCESS_KEY = os.environ.get("AWS_SECRET_ACCESS_KEY", "hrwbqzUS85G253yKi43T")
 EXPERIMENT_NAME = "mlp-projector"
-OUTPUT_DIR = os.environ.get("OUTPUT_DIR", "/mnt/object/outputs")
 
 # Configure MLflow
 os.environ["MLFLOW_S3_ENDPOINT_URL"] = MLFLOW_S3_ENDPOINT_URL
@@ -28,51 +28,53 @@ os.environ["AWS_SECRET_ACCESS_KEY"] = AWS_SECRET_ACCESS_KEY
 mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
 mlflow.set_experiment(EXPERIMENT_NAME)
 
-# === Load input data ===
-def load_latest_embeddings():
-    # Get the latest BERT run
-    bert_runs = mlflow.search_runs(
-        experiment_names=["bert-encoder"],
+def get_latest_run_id(experiment_name: str) -> str:
+    """Get the latest successful run ID for an experiment."""
+    runs = mlflow.search_runs(
+        experiment_names=[experiment_name],
         filter_string="status = 'FINISHED'",
         order_by=["start_time DESC"]
     )
-    if bert_runs.empty:
-        raise ValueError("No BERT runs found")
-    bert_run_id = bert_runs.iloc[0].run_id
-    
-    # Get the latest Matrix Factorization run
-    mf_runs = mlflow.search_runs(
-        experiment_names=["matrix-factorization"],
-        filter_string="status = 'FINISHED'",
-        order_by=["start_time DESC"]
-    )
-    if mf_runs.empty:
-        raise ValueError("No Matrix Factorization runs found")
-    mf_run_id = mf_runs.iloc[0].run_id
-    
-    # Download embeddings
-    with tempfile.TemporaryDirectory() as tmp_dir:
-        # Download BERT embeddings
-        bert_path = mlflow.artifacts.download_artifacts(
-            run_id=bert_run_id,
-            artifact_path="embeddings/bert_embeddings.npz",
-            dst_path=tmp_dir
-        )
-        bert_npz = np.load(bert_path)
-        
-        # Download MF embeddings
-        mf_path = mlflow.artifacts.download_artifacts(
-            run_id=mf_run_id,
-            artifact_path="embeddings/mf_embeddings.npz",
-            dst_path=tmp_dir
-        )
-        mf_npz = np.load(mf_path)
-    
-    return bert_npz, mf_npz
+    if runs.empty:
+        raise ValueError(f"No successful runs found for experiment {experiment_name}")
+    return runs.iloc[0].run_id
 
-# Load embeddings
+def load_embeddings_from_mlflow() -> Tuple[Dict[str, np.ndarray], Dict[str, np.ndarray]]:
+    """Load BERT and MF embeddings from MLflow."""
+    try:
+        # Get latest run IDs
+        bert_run_id = get_latest_run_id("bert-encoder")
+        mf_run_id = get_latest_run_id("matrix-factorization")
+        
+        logger.info(f"Loading embeddings from BERT run {bert_run_id} and MF run {mf_run_id}")
+        
+        # Download embeddings
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            # Download BERT embeddings
+            bert_path = mlflow.artifacts.download_artifacts(
+                run_id=bert_run_id,
+                artifact_path="embeddings/bert_embeddings.npz",
+                dst_path=tmp_dir
+            )
+            bert_npz = np.load(bert_path)
+            
+            # Download MF embeddings
+            mf_path = mlflow.artifacts.download_artifacts(
+                run_id=mf_run_id,
+                artifact_path="embeddings/mf_embeddings.npz",
+                dst_path=tmp_dir
+            )
+            mf_npz = np.load(mf_path)
+        
+        return bert_npz, mf_npz
+    
+    except Exception as e:
+        logger.error(f"Error loading embeddings: {str(e)}")
+        raise
+
+# === Load input data ===
 logger.info("Loading embeddings from MLflow...")
-bert_npz, mf_npz = load_latest_embeddings()
+bert_npz, mf_npz = load_embeddings_from_mlflow()
 
 # Load track embeddings
 bert_embeddings = {k: bert_npz[k] for k in bert_npz.files}
@@ -82,8 +84,9 @@ item_embeddings = mf_npz['item_embeddings']  # matrix [num_items, dim]
 common_ids = list(set(bert_embeddings.keys()) & set(map(str, range(item_embeddings.shape[0]))))
 common_ids = sorted(common_ids, key=int)  # ensure order
 
-X = np.array([bert_embeddings[tid] for tid in common_ids])
-Y = item_embeddings[np.array(list(map(int, common_ids)))]
+# Use MF embeddings as input (X) and BERT embeddings as target (Y)
+X = item_embeddings[np.array(list(map(int, common_ids)))]
+Y = np.array([bert_embeddings[tid] for tid in common_ids])
 
 # Convert to tensors
 X_tensor = torch.tensor(X, dtype=torch.float32)
@@ -106,11 +109,12 @@ class MLPProjector(nn.Module):
 with mlflow.start_run() as run:
     # Log parameters
     mlflow.log_params({
-        "input_dim": X_tensor.shape[1],
-        "output_dim": Y_tensor.shape[1],
+        "input_dim": X_tensor.shape[1],  # MF embedding dimension
+        "output_dim": Y_tensor.shape[1],  # BERT embedding dimension
         "hidden_dim": 256,
         "learning_rate": 1e-3,
-        "epochs": 20
+        "epochs": 20,
+        "num_samples": len(common_ids)
     })
     
     input_dim = X_tensor.shape[1]
@@ -145,9 +149,31 @@ with mlflow.start_run() as run:
             "model_state": model.state_dict(),
             "input_dim": input_dim,
             "output_dim": output_dim,
-            "hidden_dim": 256
+            "hidden_dim": 256,
+            "mlflow_run_id": run.info.run_id
         }, model_path)
         mlflow.log_artifact(model_path, "models")
         logger.info(f"Model saved to MinIO through MLflow run {run.info.run_id}")
+        
+        # Generate projected embeddings for all tracks
+        logger.info("Generating projected embeddings...")
+        model.eval()
+        with torch.no_grad():
+            # Get all MF embeddings
+            all_mf_embeddings = item_embeddings
+            all_mf_embeddings = torch.tensor(all_mf_embeddings, dtype=torch.float32).to(device)
+            
+            # Project embeddings
+            projected_embeddings = model(all_mf_embeddings).cpu().numpy()
+            
+            # Save projected embeddings
+            projected_path = os.path.join(tmp_dir, "projected_embeddings.npz")
+            np.savez(
+                projected_path,
+                embeddings=projected_embeddings,
+                track_ids=list(map(str, range(len(all_mf_embeddings))))
+            )
+            mlflow.log_artifact(projected_path, "embeddings")
+            logger.info(f"Projected embeddings saved to MinIO through MLflow run {run.info.run_id}")
 
 logger.info("Training completed successfully!")

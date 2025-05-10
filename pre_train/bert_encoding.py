@@ -5,107 +5,90 @@ import mlflow
 import torch
 import numpy as np
 import json
-import gc
-from transformers import BertTokenizer, BertModel
+import tempfile
+from transformers import DistilBertTokenizer, DistilBertModel
 from tqdm import tqdm
 
 # ---- CONFIG SECTION ---- #
 MLFLOW_TRACKING_URI = os.environ.get("MLFLOW_TRACKING_URI", "http://129.114.25.37:8000/")
-EXPERIMENT_NAME = "bert-track-encoding"
+MLFLOW_S3_ENDPOINT_URL = os.environ.get("MLFLOW_S3_ENDPOINT_URL", "http://129.114.25.37:9000")
+AWS_ACCESS_KEY_ID = os.environ.get("AWS_ACCESS_KEY_ID", "admin")
+AWS_SECRET_ACCESS_KEY = os.environ.get("AWS_SECRET_ACCESS_KEY", "hrwbqzUS85G253yKi43T")
+EXPERIMENT_NAME = "bert-track-embeddings"
 
 # Data paths
-DATA_DIR = os.environ.get("PLAYLIST_DATA_DIR", "/mnt/object")
-TRACK_TEXT_PATH = os.path.join(DATA_DIR, "processed_data/track_texts.json")
-OUTPUT_DIR = os.environ.get("OUTPUT_DIR", "/mnt/object/outputs")
-os.makedirs(OUTPUT_DIR, exist_ok=True)
-OUTPUT_NPZ_PATH = os.path.join(OUTPUT_DIR, "bert_track_embeddings.npz")
+DATA_DIR = os.environ.get("PLAYLIST_DATA_DIR", "/mnt/block/processed")
+TRACK_JSON_PATH = os.path.join(DATA_DIR, "track_texts.json")  # JSON file with track information
 
 # Model parameters
-BATCH_SIZE = 16
+MAX_LEN = 128
+BATCH_SIZE = 32
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # ------------------------ #
 
-def cleanup_memory():
-    """Clean up both RAM and GPU memory"""
-    # Clear RAM
-    gc.collect()
-    
-    # Clear GPU memory if available
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()
-        torch.cuda.synchronize()
+# Set up MLflow
+os.environ["MLFLOW_S3_ENDPOINT_URL"] = MLFLOW_S3_ENDPOINT_URL
+os.environ["AWS_ACCESS_KEY_ID"] = AWS_ACCESS_KEY_ID
+os.environ["AWS_SECRET_ACCESS_KEY"] = AWS_SECRET_ACCESS_KEY
+
+mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
+mlflow.set_experiment(EXPERIMENT_NAME)
+
+def save_embeddings_to_minio(embeddings_dict, run_id):
+    """Save embeddings to MinIO using MLflow"""
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        # Save embeddings to temporary file
+        temp_npz = os.path.join(tmp_dir, "bert_track_embeddings.npz")
+        np.savez(temp_npz, **embeddings_dict)
+        
+        # Log to MLflow (which will save to MinIO)
+        mlflow.log_artifact(temp_npz, "embeddings")
+        print(f"Embeddings saved to MinIO through MLflow run {run_id}")
 
 def main():
-    """Main function for BERT track encoding"""
-    print(f"Using device: {DEVICE}")
-    
-    # Configure MLflow
-    mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
-    mlflow.set_experiment(EXPERIMENT_NAME)
-    
-    # Load track text data
-    print(f"Loading track text data from {TRACK_TEXT_PATH}")
-    with open(TRACK_TEXT_PATH, "r") as f:
-        track_map = json.load(f)
-    print(f"Loaded {len(track_map)} tracks")
-    
-    track_ids = list(track_map.keys())
-    descriptions = list(track_map.values())
+    # Load track data
+    with open(TRACK_JSON_PATH, 'r') as f:
+        track_data = json.load(f)
     
     # Initialize BERT model and tokenizer
-    print("Initializing BERT model and tokenizer")
-    tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-    model = BertModel.from_pretrained('bert-base-uncased').to(DEVICE)
+    tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
+    model = DistilBertModel.from_pretrained('distilbert-base-uncased')
+    model.to(DEVICE)
     model.eval()
     
-    # Start MLflow run
-    with mlflow.start_run():
+    # Process tracks in batches
+    embeddings = {}
+    batch_size = BATCH_SIZE
+    track_ids = list(track_data.keys())
+    
+    with mlflow.start_run() as run:
+        for i in tqdm(range(0, len(track_ids), batch_size)):
+            batch_ids = track_ids[i:i + batch_size]
+            batch_texts = [track_data[tid] for tid in batch_ids]
+            
+            # Tokenize
+            inputs = tokenizer(batch_texts, padding=True, truncation=True, max_length=MAX_LEN, return_tensors="pt")
+            inputs = {k: v.to(DEVICE) for k, v in inputs.items()}
+            
+            # Get embeddings
+            with torch.no_grad():
+                outputs = model(**inputs)
+                batch_embeddings = outputs.last_hidden_state[:, 0, :].cpu().numpy()
+            
+            # Store embeddings
+            for tid, emb in zip(batch_ids, batch_embeddings):
+                embeddings[tid] = emb
+        
+        # Save embeddings to MinIO
+        save_embeddings_to_minio(embeddings, run.info.run_id)
+        
         # Log parameters
         mlflow.log_params({
-            "model": "bert-base-uncased",
             "batch_size": BATCH_SIZE,
-            "num_tracks": len(track_ids),
-            "device": str(DEVICE)
+            "max_length": MAX_LEN,
+            "num_tracks": len(embeddings),
+            "embedding_dim": batch_embeddings.shape[1]
         })
-        
-        # Generate embeddings
-        print("Generating BERT embeddings")
-        all_embeddings = []
-        all_track_ids = []
-        
-        with torch.no_grad():
-            for i in tqdm(range(0, len(descriptions), BATCH_SIZE), desc="Encoding BERT embeddings"):
-                batch = descriptions[i:i+BATCH_SIZE]
-                batch_ids = track_ids[i:i+BATCH_SIZE]
-                
-                encodings = tokenizer(batch, truncation=True, padding='longest', return_tensors='pt')
-                encodings = {k: v.to(device) for k, v in encodings.items()}
-                
-                outputs = model(**encodings)
-                cls_embeddings = outputs.last_hidden_state[:, 0, :].cpu()
-                
-                all_embeddings.extend(cls_embeddings)
-                all_track_ids.extend(batch_ids)
-                
-                # Clean up memory after each batch
-                del encodings, outputs, cls_embeddings
-                cleanup_memory()
-        
-        # Create embedding dictionary
-        embedding_dict = {tid: emb.numpy() for tid, emb in zip(all_track_ids, all_embeddings)}
-        
-        # Save embeddings to NPZ file
-        print(f"Saving {len(embedding_dict)} track embeddings to {OUTPUT_NPZ_PATH}")
-        np.savez(OUTPUT_NPZ_PATH, **embedding_dict)
-        
-        # Log artifact
-        mlflow.log_artifact(OUTPUT_NPZ_PATH)
-        
-        # Final cleanup
-        del all_embeddings, all_track_ids, embedding_dict
-        cleanup_memory()
-        
-        print("BERT encoding completed")
 
 if __name__ == "__main__":
     main()

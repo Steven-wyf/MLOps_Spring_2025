@@ -15,6 +15,7 @@ from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, precision_recall_fscore_support, ndcg_score
+from typing import Dict, List, Tuple, Any
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -24,7 +25,7 @@ logger = logging.getLogger(__name__)
 MLFLOW_TRACKING_URI = os.environ.get("MLFLOW_TRACKING_URI", "http://129.114.25.37:8000/")
 MLFLOW_S3_ENDPOINT_URL = os.environ.get("MLFLOW_S3_ENDPOINT_URL", "http://129.114.25.37:9000")
 AWS_ACCESS_KEY_ID = os.environ.get("AWS_ACCESS_KEY_ID", "admin")
-AWS_SECRET_ACCESS_KEY = os.environ.get("AWS_SECRET_ACCESS_KEY", "XCqPacaUHUur82cNZI1R")
+AWS_SECRET_ACCESS_KEY = os.environ.get("AWS_SECRET_ACCESS_KEY", "hrwbqzUS85G253yKi43T")
 EXPERIMENT_NAME = "llara-classifier"
 OUTPUT_DIR = os.environ.get("OUTPUT_DIR", "/mnt/object/outputs")
 
@@ -46,39 +47,70 @@ os.environ["AWS_SECRET_ACCESS_KEY"] = AWS_SECRET_ACCESS_KEY
 mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
 mlflow.set_experiment(EXPERIMENT_NAME)
 
-def load_latest_embeddings():
-    """Load the latest MLP projected embeddings from MLflow"""
-    # Get the latest MLP run
-    mlp_runs = mlflow.search_runs(
-        experiment_names=["mlp-projector"],
+def get_latest_run_id(experiment_name: str) -> str:
+    """Get the latest successful run ID for an experiment."""
+    runs = mlflow.search_runs(
+        experiment_names=[experiment_name],
         filter_string="status = 'FINISHED'",
         order_by=["start_time DESC"]
     )
-    if mlp_runs.empty:
-        raise ValueError("No MLP runs found")
-    mlp_run_id = mlp_runs.iloc[0].run_id
-    
-    # Download embeddings
-    with tempfile.TemporaryDirectory() as tmp_dir:
-        # Download projected embeddings
-        emb_path = mlflow.artifacts.download_artifacts(
-            run_id=mlp_run_id,
-            artifact_path="embeddings/projected_embeddings.npz",
-            dst_path=tmp_dir
-        )
-        emb_data = np.load(emb_path)
-    
-    return emb_data
+    if runs.empty:
+        raise ValueError(f"No successful runs found for experiment {experiment_name}")
+    return runs.iloc[0].run_id
 
-def load_playlist_data():
-    """Load and process playlist data"""
-    playlist_file = os.path.join(OUTPUT_DIR, "playlist_track_list.csv")
-    logger.info(f"Loading playlist data from {playlist_file}")
+def load_embeddings_from_mlflow() -> Dict[str, Any]:
+    """Load the latest MLP projected embeddings from MLflow"""
+    try:
+        # Get latest MLP run ID
+        mlp_run_id = get_latest_run_id("mlp-projector")
+        logger.info(f"Loading embeddings from MLP run {mlp_run_id}")
+        
+        # Download embeddings
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            # Download projected embeddings
+            emb_path = mlflow.artifacts.download_artifacts(
+                run_id=mlp_run_id,
+                artifact_path="embeddings/projected_embeddings.npz",
+                dst_path=tmp_dir
+            )
+            emb_data = np.load(emb_path)
+            
+            # Create track ID to index mapping
+            track_to_idx = {track_id: idx for idx, track_id in enumerate(emb_data['track_ids'])}
+            
+            return {
+                'embeddings': emb_data['embeddings'],
+                'track_ids': emb_data['track_ids'],
+                'track_to_idx': track_to_idx
+            }
     
-    df = pd.read_csv(playlist_file).dropna()
-    return df
+    except Exception as e:
+        logger.error(f"Error loading embeddings: {str(e)}")
+        raise
 
-def create_training_pairs(df, track_to_idx):
+def load_playlist_data() -> pd.DataFrame:
+    """Load and process playlist data from MLflow"""
+    try:
+        # Get latest data processing run ID
+        data_run_id = get_latest_run_id("data-processing")
+        logger.info(f"Loading playlist data from run {data_run_id}")
+        
+        # Download playlist data
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            data_path = mlflow.artifacts.download_artifacts(
+                run_id=data_run_id,
+                artifact_path="processed/playlist_track_list.csv",
+                dst_path=tmp_dir
+            )
+            df = pd.read_csv(data_path).dropna()
+        
+        return df
+    
+    except Exception as e:
+        logger.error(f"Error loading playlist data: {str(e)}")
+        raise
+
+def create_training_pairs(df: pd.DataFrame, track_to_idx: Dict[str, int]) -> List[Tuple[int, int]]:
     """Create training pairs from playlist data"""
     playlists = df.groupby('playlist_id')['track_uri'].apply(list)
     samples = []
@@ -240,103 +272,73 @@ def train_model(model, train_loader, val_loader, test_loader, device, num_classe
     return model, train_losses, val_losses, val_accuracies, metrics
 
 def main():
-    """Main training function"""
-    logger.info("Starting LLaRA training")
-    logger.info(f"Using device: {DEVICE}")
-    
     # Load data
-    emb_data = load_latest_embeddings()
-    track_ids = list(emb_data.files)
-    track_to_idx = {tid: i for i, tid in enumerate(track_ids)}
-    
+    logger.info("Loading embeddings and playlist data...")
+    emb_data = load_embeddings_from_mlflow()
     df = load_playlist_data()
-    samples = create_training_pairs(df, track_to_idx)
+    
+    # Create training pairs
+    logger.info("Creating training pairs...")
+    samples = create_training_pairs(df, emb_data['track_to_idx'])
+    
+    # Prepare data
+    X = emb_data['embeddings'][[emb_data['track_to_idx'][i] for i, _ in samples]]
+    y = np.array([j for _, j in samples])
     
     # Split data
-    train_samples, temp_samples = train_test_split(samples, test_size=0.2, random_state=42)
-    val_samples, test_samples = train_test_split(temp_samples, test_size=0.5, random_state=42)
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    X_train, X_val, y_train, y_val = train_test_split(X_train, y_train, test_size=0.2, random_state=42)
     
-    # Create datasets
-    X_train = np.array([emb_data[track_ids[i]] for i, _ in train_samples])
-    y_train = np.array([j for _, j in train_samples])
-    
-    X_val = np.array([emb_data[track_ids[i]] for i, _ in val_samples])
-    y_val = np.array([j for _, j in val_samples])
-    
-    X_test = np.array([emb_data[track_ids[i]] for i, _ in test_samples])
-    y_test = np.array([j for _, j in test_samples])
-    
-    # Create dataloaders
-    train_dataset = TensorDataset(torch.tensor(X_train, dtype=torch.float32), torch.tensor(y_train, dtype=torch.long))
-    val_dataset = TensorDataset(torch.tensor(X_val, dtype=torch.float32), torch.tensor(y_val, dtype=torch.long))
-    test_dataset = TensorDataset(torch.tensor(X_test, dtype=torch.float32), torch.tensor(y_test, dtype=torch.long))
+    # Create data loaders
+    train_dataset = TensorDataset(torch.FloatTensor(X_train), torch.LongTensor(y_train))
+    val_dataset = TensorDataset(torch.FloatTensor(X_val), torch.LongTensor(y_val))
+    test_dataset = TensorDataset(torch.FloatTensor(X_test), torch.LongTensor(y_test))
     
     train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE)
     test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE)
     
     # Initialize model
-    model = LlaRAClassifier(
-        input_dim=X_train.shape[1],
-        num_classes=len(track_ids),
-        hidden_dim=HIDDEN_DIM,
-        dropout=DROPOUT
-    ).to(DEVICE)
+    input_dim = X.shape[1]
+    num_classes = len(emb_data['track_to_idx'])
+    model = LlaRAClassifier(input_dim, num_classes, HIDDEN_DIM, DROPOUT).to(DEVICE)
     
-    # Start MLflow run
+    # Train model
     with mlflow.start_run() as run:
         # Log parameters
         mlflow.log_params({
+            "input_dim": input_dim,
+            "num_classes": num_classes,
             "hidden_dim": HIDDEN_DIM,
             "dropout": DROPOUT,
             "learning_rate": LEARNING_RATE,
             "weight_decay": WEIGHT_DECAY,
             "epochs": EPOCHS,
             "batch_size": BATCH_SIZE,
-            "input_dim": X_train.shape[1],
-            "num_classes": len(track_ids),
-            "num_train_samples": len(X_train),
-            "num_val_samples": len(X_val),
-            "num_test_samples": len(X_test)
+            "num_samples": len(samples)
         })
         
-        # Train model
-        model, train_losses, val_losses, val_accuracies, metrics = train_model(
-            model, train_loader, val_loader, test_loader, DEVICE, len(track_ids)
-        )
+        # Train and evaluate
+        best_model_state, metrics = train_model(model, train_loader, val_loader, test_loader, DEVICE, num_classes)
         
         # Log metrics
-        for metric_name, metric_value in metrics.items():
-            mlflow.log_metric(metric_name, metric_value)
+        for metric_name, value in metrics.items():
+            mlflow.log_metric(metric_name, value)
         
-        # Save model to MinIO through MLflow
+        # Save model
         with tempfile.TemporaryDirectory() as tmp_dir:
-            model_path = os.path.join(tmp_dir, "llara_classifier.pt")
+            model_path = os.path.join(tmp_dir, "llara_model.pt")
             torch.save({
-                "model_state": model.state_dict(),
-                "input_dim": X_train.shape[1],
-                "num_classes": len(track_ids),
+                "model_state": best_model_state,
+                "input_dim": input_dim,
+                "num_classes": num_classes,
                 "hidden_dim": HIDDEN_DIM,
-                "dropout": DROPOUT
+                "dropout": DROPOUT,
+                "mlflow_run_id": run.info.run_id,
+                "track_to_idx": emb_data['track_to_idx']  # Save track mapping with model
             }, model_path)
             mlflow.log_artifact(model_path, "models")
-            
-            # Save track ID mapping
-            track_mapping = {idx: track_id for track_id, idx in track_to_idx.items()}
-            mapping_path = os.path.join(tmp_dir, "track_id_mapping.json")
-            with open(mapping_path, "w") as f:
-                json.dump(track_mapping, f)
-            mlflow.log_artifact(mapping_path, "mappings")
-        
-        logger.info("Training completed successfully!")
-        logger.info(f"Test accuracy: {metrics['accuracy']:.4f}")
-        for k in EVAL_TOP_K:
-            logger.info(f"Top-{k} accuracy: {metrics[f'top_{k}_accuracy']:.4f}")
+            logger.info(f"Model saved to MinIO through MLflow run {run.info.run_id}")
 
 if __name__ == "__main__":
-    try:
-        main()
-        exit(0)
-    except Exception as e:
-        logger.exception(f"LLaRA training failed: {str(e)}")
-        exit(1) 
+    main() 

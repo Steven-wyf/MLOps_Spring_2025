@@ -20,10 +20,8 @@ logger = logging.getLogger(__name__)
 MLFLOW_TRACKING_URI = os.environ.get("MLFLOW_TRACKING_URI", "http://129.114.25.37:8000/")
 MLFLOW_S3_ENDPOINT_URL = os.environ.get("MLFLOW_S3_ENDPOINT_URL", "http://129.114.25.37:9000")
 AWS_ACCESS_KEY_ID = os.environ.get("AWS_ACCESS_KEY_ID", "admin")
-AWS_SECRET_ACCESS_KEY = os.environ.get("AWS_SECRET_ACCESS_KEY", "XCqPacaUHUur82cNZI1R")
+AWS_SECRET_ACCESS_KEY = os.environ.get("AWS_SECRET_ACCESS_KEY", "hrwbqzUS85G253yKi43T")
 EXPERIMENT_NAME = "matrix-factorization"
-OUTPUT_DIR = os.environ.get("OUTPUT_DIR", "/mnt/object/outputs")
-EMBEDDINGS_PATH = os.path.join(OUTPUT_DIR, "mf_embeddings.npz")
 
 # Configure MLflow
 os.environ["MLFLOW_S3_ENDPOINT_URL"] = MLFLOW_S3_ENDPOINT_URL
@@ -32,6 +30,32 @@ os.environ["AWS_SECRET_ACCESS_KEY"] = AWS_SECRET_ACCESS_KEY
 
 mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
 mlflow.set_experiment(EXPERIMENT_NAME)
+
+def save_to_minio(data, filename, bucket='mlflow-artifacts'):
+    """Save data directly to MinIO using boto3"""
+    s3_client = boto3.client('s3',
+        endpoint_url=MLFLOW_S3_ENDPOINT_URL,
+        aws_access_key_id=AWS_ACCESS_KEY_ID,
+        aws_secret_access_key=AWS_SECRET_ACCESS_KEY
+    )
+    
+    # 将数据保存到内存中的文件
+    buffer = io.BytesIO()
+    if isinstance(data, dict) and 'model_state' in data:
+        # 如果是模型，使用 torch.save
+        torch.save(data, buffer)
+    else:
+        # 如果是 numpy 数组，使用 np.savez
+        np.savez(buffer, **data)
+    buffer.seek(0)
+    
+    # 上传到 MinIO
+    s3_client.upload_fileobj(
+        buffer,
+        bucket,
+        filename
+    )
+    logger.info(f"Saved {filename} to MinIO bucket {bucket}")
 
 class MatrixFactorization(nn.Module):
     def __init__(self, num_users, num_items, embedding_dim):
@@ -166,6 +190,7 @@ with mlflow.start_run() as run:
     
     # Save model to MinIO through MLflow
     with tempfile.TemporaryDirectory() as tmp_dir:
+        # Save model
         model_path = os.path.join(tmp_dir, "mf_model.pt")
         torch.save({
             "model_state": model.state_dict(),
@@ -175,32 +200,28 @@ with mlflow.start_run() as run:
         }, model_path)
         mlflow.log_artifact(model_path, "models")
         logger.info(f"Model saved to MinIO through MLflow run {run.info.run_id}")
-    
-    # Generate and save embeddings
-    model.eval()
-    with torch.no_grad():
-        user_embeddings = model.user_embedding.weight.cpu().numpy()
-        item_embeddings = model.item_embedding.weight.cpu().numpy()
-    
-    # Save embeddings
-    np.savez(
-        EMBEDDINGS_PATH,
-        user_embeddings=user_embeddings,
-        item_embeddings=item_embeddings,
-        user_mapping=dict(enumerate(user_encoder.classes_)),
-        item_mapping=dict(enumerate(item_encoder.classes_))
-    )
-    mlflow.log_artifact(EMBEDDINGS_PATH, "embeddings")
-    
-    # Save model info
-    model_info = {
-        "num_users": num_users,
-        "num_items": num_items,
-        "embedding_dim": embedding_dim,
-        "mlflow_run_id": run.info.run_id,
-        "test_rmse": float(rmse),
-        "test_avg_precision": float(avg_prec)
-    }
-    mlflow.log_dict(model_info, "model_info.json")
+        
+        # Save embeddings
+        embeddings_path = os.path.join(tmp_dir, "mf_embeddings.npz")
+        np.savez(
+            embeddings_path,
+            user_embeddings=model.user_embedding.weight.cpu().numpy(),
+            item_embeddings=model.item_embedding.weight.cpu().numpy(),
+            user_mapping=dict(enumerate(user_encoder.classes_)),
+            item_mapping=dict(enumerate(item_encoder.classes_))
+        )
+        mlflow.log_artifact(embeddings_path, "embeddings")
+        
+        # Save model info
+        model_info_path = os.path.join(tmp_dir, "mf_model_info.pt")
+        torch.save({
+            "num_users": num_users,
+            "num_items": num_items,
+            "embedding_dim": embedding_dim,
+            "mlflow_run_id": run.info.run_id,
+            "test_rmse": float(rmse),
+            "test_avg_precision": float(avg_prec)
+        }, model_info_path)
+        mlflow.log_artifact(model_info_path, "models")
 
 logger.info("Training and evaluation completed successfully!") 
