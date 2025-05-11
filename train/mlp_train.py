@@ -164,8 +164,11 @@ item_embeddings = mf_embeddings['item_embeddings']  # matrix [num_items, dim]
 common_ids = list(set(bert_embeddings.keys()) & set(map(str, range(item_embeddings.shape[0]))))
 common_ids = sorted(common_ids, key=int)  # ensure order
 
+# Convert IDs to integers for indexing
+common_ids_int = np.array([int(tid) for tid in common_ids])
+
 # Use MF embeddings as input (X) and BERT embeddings as target (Y)
-X = item_embeddings[np.array(list(map(int, common_ids)))]
+X = item_embeddings[common_ids_int]
 Y = np.array([bert_embeddings[tid] for tid in common_ids])
 
 # Convert to tensors
