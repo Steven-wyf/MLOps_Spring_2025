@@ -68,19 +68,49 @@ def load_embeddings_from_mlflow() -> Dict[str, Any]:
         # Download embeddings
         with tempfile.TemporaryDirectory() as tmp_dir:
             # Download projected embeddings
-            emb_path = mlflow.artifacts.download_artifacts(
+            chunk_dir = mlflow.artifacts.download_artifacts(
                 run_id=mlp_run_id,
-                artifact_path="embeddings/projected_embeddings.npz",
+                artifact_path="embeddings",
                 dst_path=tmp_dir
             )
-            emb_data = np.load(emb_path)
+            
+            # 遍历每个 chunk 目录
+            found_files = False
+            embeddings = None
+            track_ids = None
+            
+            for chunk_name in os.listdir(chunk_dir):
+                if chunk_name.startswith('chunk_'):
+                    chunk_path = os.path.join(chunk_dir, chunk_name)
+                    if os.path.isdir(chunk_path):
+                        # 在 chunk 目录中查找 .npz 文件
+                        for file_name in os.listdir(chunk_path):
+                            if file_name.endswith('.npz'):
+                                found_files = True
+                                file_path = os.path.join(chunk_path, file_name)
+                                try:
+                                    chunk_data = np.load(file_path, allow_pickle=True)
+                                    if embeddings is None:
+                                        embeddings = chunk_data['embeddings']
+                                        track_ids = chunk_data['track_ids']
+                                    else:
+                                        embeddings = np.concatenate([embeddings, chunk_data['embeddings']])
+                                        track_ids = np.concatenate([track_ids, chunk_data['track_ids']])
+                                except Exception as e:
+                                    logger.error(f"Error loading file {file_name}: {str(e)}")
+            
+            if not found_files:
+                raise Exception("No .npz files found in embeddings directory!")
+            
+            if embeddings is None:
+                raise Exception("No embeddings loaded!")
             
             # Create track ID to index mapping
-            track_to_idx = {track_id: idx for idx, track_id in enumerate(emb_data['track_ids'])}
+            track_to_idx = {track_id: idx for idx, track_id in enumerate(track_ids)}
             
             return {
-                'embeddings': emb_data['embeddings'],
-                'track_ids': emb_data['track_ids'],
+                'embeddings': embeddings,
+                'track_ids': track_ids,
                 'track_to_idx': track_to_idx
             }
     
