@@ -364,20 +364,22 @@ def main():
     # Create training pairs
     samples = create_training_pairs(df, uri_to_idx)
     
+    # 设置设备
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Using device: {device}")
+    
     # Create training data
     X = emb_data['embeddings'][[i for i, _ in samples]]  # 使用 track IDs 作为索引
     y = np.array([j for _, j in samples])
     
-    # Convert to tensors
-    X_tensor = torch.FloatTensor(X)
-    Y_tensor = torch.FloatTensor(y)
+    # Convert to tensors and move to device
+    X_tensor = torch.FloatTensor(X).to(device)
+    Y_tensor = torch.LongTensor(y).to(device)  # 使用 LongTensor 因为这是分类任务
     
     # Initialize model
     input_dim = X.shape[1]
     output_dim = len(uri_to_idx)  # 输出维度是 track 的数量
     model = LlaRAClassifier(input_dim, output_dim, HIDDEN_DIM, DROPOUT)
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"Using device: {device}")
     model.to(device)
     
     # Training loop
