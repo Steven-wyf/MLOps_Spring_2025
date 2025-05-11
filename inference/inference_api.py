@@ -18,7 +18,11 @@ from data_processing.data_preprocess import process_data
 
 from tritonclient.http import InferenceServerClient, InferInput, InferRequestedOutput
 
+from prometheus_fastapi_instrumentator import Instrumentator
+
 app = FastAPI(title="Music Recommendation")
+
+Instrumentator().instrument(app).expose(app)
 
 # Mount static files and templates
 app.mount("/static", StaticFiles(directory="static"), name="static")
