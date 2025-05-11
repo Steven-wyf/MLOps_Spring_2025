@@ -37,14 +37,36 @@ mlflow.set_experiment(EXPERIMENT_NAME)
 
 def save_embeddings_to_minio(embeddings_dict, run_id):
     """Save embeddings to MinIO using MLflow"""
+    print("Starting to save embeddings...")
+    
+    # 将 embeddings 分成较小的块
+    chunk_size = 1000  # 每个文件保存1000个embeddings
+    items = list(embeddings_dict.items())
+    chunks = [dict(items[i:i + chunk_size]) for i in range(0, len(items), chunk_size)]
+    
+    print(f"Saving {len(chunks)} chunks of embeddings...")
+    
     with tempfile.TemporaryDirectory() as tmp_dir:
-        # Save embeddings to temporary file
-        temp_npz = os.path.join(tmp_dir, "bert_track_embeddings.npz")
-        np.savez(temp_npz, **embeddings_dict)
+        for i, chunk in enumerate(chunks):
+            print(f"Saving chunk {i+1}/{len(chunks)}...")
+            # 保存每个块到临时文件
+            temp_npz = os.path.join(tmp_dir, f"bert_track_embeddings_chunk_{i}.npz")
+            np.savez(temp_npz, **chunk)
+            print(f"Saved chunk to {temp_npz}")
+            
+            # 上传到 MinIO
+            print(f"Uploading chunk {i+1} to MinIO...")
+            try:
+                mlflow.log_artifact(temp_npz, f"embeddings/chunk_{i}")
+                print(f"Successfully uploaded chunk {i+1}")
+            except Exception as e:
+                print(f"Error uploading chunk {i+1}: {str(e)}")
+                # 如果上传失败，保存到本地
+                backup_path = f"bert_track_embeddings_chunk_{i}_backup.npz"
+                np.savez(backup_path, **chunk)
+                print(f"Saved backup to {backup_path}")
         
-        # Log to MLflow (which will save to MinIO)
-        mlflow.log_artifact(temp_npz, "embeddings")
-        print(f"Embeddings saved to MinIO through MLflow run {run_id}")
+        print(f"All chunks processed. Total chunks: {len(chunks)}")
 
 def main():
     # Load track data
@@ -56,6 +78,7 @@ def main():
         track_data = json.load(f)
     
     # Initialize BERT model and tokenizer
+    print("Initializing BERT model...")
     tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
     model = DistilBertModel.from_pretrained('distilbert-base-uncased')
     model.to(DEVICE)
@@ -66,6 +89,7 @@ def main():
     batch_size = BATCH_SIZE
     track_ids = list(track_data.keys())
     
+    print("Starting MLflow run...")
     with mlflow.start_run() as run:
         for i in tqdm(range(0, len(track_ids), batch_size)):
             batch_ids = track_ids[i:i + batch_size]
@@ -84,9 +108,11 @@ def main():
             for tid, emb in zip(batch_ids, batch_embeddings):
                 embeddings[tid] = emb
         
+        print("Processing complete. Starting to save embeddings...")
         # Save embeddings to MinIO
         save_embeddings_to_minio(embeddings, run.info.run_id)
         
+        print("Logging parameters...")
         # Log parameters
         mlflow.log_params({
             "batch_size": BATCH_SIZE,
@@ -94,6 +120,7 @@ def main():
             "num_tracks": len(embeddings),
             "embedding_dim": batch_embeddings.shape[1]
         })
+        print("All operations completed successfully!")
 
 if __name__ == "__main__":
     main()

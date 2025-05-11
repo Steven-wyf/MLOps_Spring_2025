@@ -13,6 +13,7 @@ networkx>=3.0.0
 # MLflow and storage
 mlflow>=2.8.0
 boto3>=1.26.0
+botocore>=1.29.0
 
 # Utilities
 tqdm>=4.65.0

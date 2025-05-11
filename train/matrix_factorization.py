@@ -11,6 +11,8 @@ import os
 import logging
 import tempfile
 from tqdm import tqdm
+import boto3
+import io
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -56,6 +58,39 @@ def save_to_minio(data, filename, bucket='mlflow-artifacts'):
         filename
     )
     logger.info(f"Saved {filename} to MinIO bucket {bucket}")
+
+def save_embeddings_to_minio(embeddings_dict, run_id):
+    """Save embeddings to MinIO using MLflow"""
+    print("Starting to save embeddings...")
+    
+    # 将 embeddings 分成较小的块
+    chunk_size = 1000  # 每个文件保存1000个embeddings
+    items = list(embeddings_dict.items())
+    chunks = [dict(items[i:i + chunk_size]) for i in range(0, len(items), chunk_size)]
+    
+    print(f"Saving {len(chunks)} chunks of embeddings...")
+    
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        for i, chunk in enumerate(chunks):
+            print(f"Saving chunk {i+1}/{len(chunks)}...")
+            # 保存每个块到临时文件
+            temp_npz = os.path.join(tmp_dir, f"mf_embeddings_chunk_{i}.npz")
+            np.savez(temp_npz, **chunk)
+            print(f"Saved chunk to {temp_npz}")
+            
+            # 上传到 MinIO
+            print(f"Uploading chunk {i+1} to MinIO...")
+            try:
+                mlflow.log_artifact(temp_npz, f"embeddings/chunk_{i}")
+                print(f"Successfully uploaded chunk {i+1}")
+            except Exception as e:
+                print(f"Error uploading chunk {i+1}: {str(e)}")
+                # 如果上传失败，保存到本地
+                backup_path = f"mf_embeddings_chunk_{i}_backup.npz"
+                np.savez(backup_path, **chunk)
+                print(f"Saved backup to {backup_path}")
+        
+        print(f"All chunks processed. Total chunks: {len(chunks)}")
 
 class MatrixFactorization(nn.Module):
     def __init__(self, num_users, num_items, embedding_dim):
@@ -203,16 +238,15 @@ with mlflow.start_run() as run:
         mlflow.log_artifact(model_path, "models")
         logger.info(f"Model saved to MinIO through MLflow run {run.info.run_id}")
         
-        # Save embeddings
-        embeddings_path = os.path.join(tmp_dir, "mf_embeddings.npz")
-        np.savez(
-            embeddings_path,
-            user_embeddings=model.user_embedding.weight.cpu().numpy(),
-            item_embeddings=model.item_embedding.weight.cpu().numpy(),
-            user_mapping=dict(enumerate(user_encoder.classes_)),
-            item_mapping=dict(enumerate(item_encoder.classes_))
-        )
-        mlflow.log_artifact(embeddings_path, "embeddings")
+        # Save embeddings in chunks
+        logger.info("Saving embeddings in chunks...")
+        embeddings_dict = {
+            'user_embeddings': model.user_embedding.weight.cpu().numpy(),
+            'item_embeddings': model.item_embedding.weight.cpu().numpy(),
+            'user_mapping': dict(enumerate(user_encoder.classes_)),
+            'item_mapping': dict(enumerate(item_encoder.classes_))
+        }
+        save_embeddings_to_minio(embeddings_dict, run.info.run_id)
         
         # Save model info
         model_info_path = os.path.join(tmp_dir, "mf_model_info.pt")

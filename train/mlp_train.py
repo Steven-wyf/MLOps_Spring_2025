@@ -43,30 +43,52 @@ def load_embeddings_from_mlflow() -> Tuple[Dict[str, np.ndarray], Dict[str, np.n
     """Load BERT and MF embeddings from MLflow."""
     try:
         # Get latest run IDs
-        bert_run_id = get_latest_run_id("bert-encoder")
+        bert_run_id = get_latest_run_id("bert-track-embeddings")
         mf_run_id = get_latest_run_id("matrix-factorization")
         
         logger.info(f"Loading embeddings from BERT run {bert_run_id} and MF run {mf_run_id}")
         
         # Download embeddings
         with tempfile.TemporaryDirectory() as tmp_dir:
-            # Download BERT embeddings
-            bert_path = mlflow.artifacts.download_artifacts(
-                run_id=bert_run_id,
-                artifact_path="embeddings/bert_embeddings.npz",
-                dst_path=tmp_dir
-            )
-            bert_npz = np.load(bert_path)
+            # Download BERT embeddings (now in chunks)
+            bert_embeddings = {}
+            chunk_idx = 0
+            while True:
+                try:
+                    chunk_path = mlflow.artifacts.download_artifacts(
+                        run_id=bert_run_id,
+                        artifact_path=f"embeddings/chunk_{chunk_idx}",
+                        dst_path=tmp_dir
+                    )
+                    chunk_data = np.load(chunk_path)
+                    bert_embeddings.update({k: chunk_data[k] for k in chunk_data.files})
+                    chunk_idx += 1
+                    logger.info(f"Loaded BERT chunk {chunk_idx}")
+                except Exception as e:
+                    if chunk_idx == 0:
+                        raise Exception("No BERT embeddings found")
+                    break
             
-            # Download MF embeddings
-            mf_path = mlflow.artifacts.download_artifacts(
-                run_id=mf_run_id,
-                artifact_path="embeddings/mf_embeddings.npz",
-                dst_path=tmp_dir
-            )
-            mf_npz = np.load(mf_path)
+            # Download MF embeddings (now in chunks)
+            mf_embeddings = {}
+            chunk_idx = 0
+            while True:
+                try:
+                    chunk_path = mlflow.artifacts.download_artifacts(
+                        run_id=mf_run_id,
+                        artifact_path=f"embeddings/chunk_{chunk_idx}",
+                        dst_path=tmp_dir
+                    )
+                    chunk_data = np.load(chunk_path)
+                    mf_embeddings.update({k: chunk_data[k] for k in chunk_data.files})
+                    chunk_idx += 1
+                    logger.info(f"Loaded MF chunk {chunk_idx}")
+                except Exception as e:
+                    if chunk_idx == 0:
+                        raise Exception("No MF embeddings found")
+                    break
         
-        return bert_npz, mf_npz
+        return bert_embeddings, mf_embeddings
     
     except Exception as e:
         logger.error(f"Error loading embeddings: {str(e)}")
@@ -74,11 +96,10 @@ def load_embeddings_from_mlflow() -> Tuple[Dict[str, np.ndarray], Dict[str, np.n
 
 # === Load input data ===
 logger.info("Loading embeddings from MLflow...")
-bert_npz, mf_npz = load_embeddings_from_mlflow()
+bert_embeddings, mf_embeddings = load_embeddings_from_mlflow()
 
 # Load track embeddings
-bert_embeddings = {k: bert_npz[k] for k in bert_npz.files}
-item_embeddings = mf_npz['item_embeddings']  # matrix [num_items, dim]
+item_embeddings = mf_embeddings['item_embeddings']  # matrix [num_items, dim]
 
 # Align track IDs in both
 common_ids = list(set(bert_embeddings.keys()) & set(map(str, range(item_embeddings.shape[0]))))
