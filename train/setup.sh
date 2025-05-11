@@ -31,7 +31,7 @@ try:
     # Create S3 client
     s3 = boto3.client('s3',
         endpoint_url='http://129.114.25.37:9000',
-        aws_access_key_id='admin',
+        aws_access_key_id='your-acccess-key',
         aws_secret_access_key='hrwbqzUS85G253yKi43T',
         config=Config(signature_version='s3v4'),
         region_name='us-east-1'

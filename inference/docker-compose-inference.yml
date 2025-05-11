@@ -14,9 +14,11 @@ services:
       - mlops-network
     environment:
       - MLFLOW_TRACKING_URI=http://mlflow:5000
-      - MLFLOW_S3_ENDPOINT_URL=http://minio:9000
+      - MLFLOW_S3_ENDPOINT_URL=http://129.114.25.37:9000
       - AWS_ACCESS_KEY_ID=admin
       - AWS_SECRET_ACCESS_KEY=hrwbqzUS85G253yKi43T
+      - AWS_DEFAULT_REGION=us-east-1
+      - S3_ENDPOINT_URL=http://129.114.25.37:9000
 
 networks:
   mlops-network:
