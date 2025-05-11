@@ -54,7 +54,7 @@ def inspect_npz_file(file_path: str) -> None:
     except Exception as e:
         logger.error(f"Error inspecting npz file: {str(e)}")
 
-def load_embeddings_from_mlflow() -> Tuple[Dict[str, np.ndarray], Dict[str, np.ndarray], Dict[str, str]]:
+def load_embeddings_from_mlflow() -> Tuple[Dict[str, np.ndarray], Dict[str, np.ndarray], Dict[str, int]]:
     """Load BERT and MF embeddings from MLflow."""
     try:
         # Get latest run IDs
@@ -108,7 +108,7 @@ def load_embeddings_from_mlflow() -> Tuple[Dict[str, np.ndarray], Dict[str, np.n
             
             # Download MF embeddings (now in chunks)
             mf_embeddings = {}
-            track_id_mapping = {}  # 存储 track_id 到数字 ID 的映射
+            track_uri_to_idx = {}  # 存储 track URI 到数字 ID 的映射
             chunk_idx = 0
             while True:
                 try:
@@ -132,9 +132,40 @@ def load_embeddings_from_mlflow() -> Tuple[Dict[str, np.ndarray], Dict[str, np.n
                                         file_path = os.path.join(chunk_path, file_name)
                                         try:
                                             chunk_data = np.load(file_path, allow_pickle=True)
+                                            # 打印文件内容信息
+                                            logger.info(f"MF file {file_name} contains arrays: {chunk_data.files}")
+                                            for key in chunk_data.files:
+                                                logger.info(f"Array '{key}' shape: {chunk_data[key].shape}")
+                                            
                                             mf_embeddings.update({k: chunk_data[k] for k in chunk_data.files})
-                                            if 'track_ids' in chunk_data:
-                                                track_id_mapping.update({str(tid): str(idx) for idx, tid in enumerate(chunk_data['track_ids'])})
+                                            
+                                            # 检查 track_uris 和 track_ids 的映射
+                                            if 'track_uris' in chunk_data and 'track_ids' in chunk_data:
+                                                track_uris = chunk_data['track_uris']
+                                                track_ids = chunk_data['track_ids']
+                                                logger.info(f"Sample track_uris: {track_uris[:5]}")
+                                                logger.info(f"Sample track_ids: {track_ids[:5]}")
+                                                
+                                                # 创建映射
+                                                for idx, (uri, tid) in enumerate(zip(track_uris, track_ids)):
+                                                    track_uri_to_idx[str(uri)] = int(tid)
+                                                
+                                                # 验证映射
+                                                logger.info(f"Number of track URIs: {len(track_uris)}")
+                                                logger.info(f"Number of track IDs: {len(track_ids)}")
+                                                logger.info(f"Number of mappings: {len(track_uri_to_idx)}")
+                                                
+                                                # 检查是否有重复的 URI 或 ID
+                                                uri_set = set(track_uris)
+                                                id_set = set(track_ids)
+                                                logger.info(f"Unique URIs: {len(uri_set)}")
+                                                logger.info(f"Unique IDs: {len(id_set)}")
+                                                
+                                                if len(uri_set) != len(track_uris):
+                                                    logger.warning("Found duplicate URIs!")
+                                                if len(id_set) != len(track_ids):
+                                                    logger.warning("Found duplicate IDs!")
+                                            
                                         except Exception as e:
                                             logger.error(f"Error loading MF file {file_name}: {str(e)}")
                     
@@ -150,7 +181,7 @@ def load_embeddings_from_mlflow() -> Tuple[Dict[str, np.ndarray], Dict[str, np.n
                         raise Exception(f"No MF embeddings found: {str(e)}")
                     break
         
-        return bert_embeddings, mf_embeddings, track_id_mapping
+        return bert_embeddings, mf_embeddings, track_uri_to_idx
     
     except Exception as e:
         logger.error(f"Error loading embeddings: {str(e)}")
@@ -158,7 +189,7 @@ def load_embeddings_from_mlflow() -> Tuple[Dict[str, np.ndarray], Dict[str, np.n
 
 # === Load input data ===
 logger.info("Loading embeddings from MLflow...")
-bert_embeddings, mf_embeddings, track_id_mapping = load_embeddings_from_mlflow()
+bert_embeddings, mf_embeddings, track_uri_to_idx = load_embeddings_from_mlflow()
 
 # Load track embeddings
 item_embeddings = mf_embeddings['item_embeddings']  # matrix [num_items, dim]
@@ -172,36 +203,53 @@ logger.info(f"Number of BERT embeddings: {len(bert_embeddings)}")
 logger.info(f"Sample BERT keys: {list(bert_embeddings.keys())[:5]}")
 
 # Align track IDs in both
-mf_ids = set(track_id_mapping.values())
-bert_ids = set(bert_embeddings.keys())
-common_ids = list(mf_ids & bert_ids)
-common_ids = sorted(common_ids, key=int)  # ensure order
+bert_uris = set(bert_embeddings.keys())
+mf_uris = set(track_uri_to_idx.keys())
+common_uris = list(bert_uris & mf_uris)
+common_uris = sorted(common_uris)  # ensure order
 
 # Print ID sets info
-logger.info(f"Number of MF IDs: {len(mf_ids)}")
-logger.info(f"Number of BERT IDs: {len(bert_ids)}")
-logger.info(f"Number of common IDs: {len(common_ids)}")
-logger.info(f"Sample MF IDs: {list(mf_ids)[:5]}")
-logger.info(f"Sample BERT IDs: {list(bert_ids)[:5]}")
-logger.info(f"Sample common IDs: {common_ids[:5] if common_ids else 'None'}")
+logger.info(f"Number of MF URIs: {len(mf_uris)}")
+logger.info(f"Number of BERT URIs: {len(bert_uris)}")
+logger.info(f"Number of common URIs: {len(common_uris)}")
+logger.info(f"Sample MF URIs: {list(mf_uris)[:5]}")
+logger.info(f"Sample BERT URIs: {list(bert_uris)[:5]}")
+logger.info(f"Sample common URIs: {common_uris[:5] if common_uris else 'None'}")
 
-if not common_ids:
-    raise ValueError("No common IDs found between BERT and MF embeddings!")
+if not common_uris:
+    raise ValueError("No common URIs found between BERT and MF embeddings!")
 
-# Convert IDs to integers for indexing
-common_ids_int = np.array([int(tid) for tid in common_ids], dtype=np.int64)
+# Convert URIs to indices for MF embeddings
+common_indices = np.array([track_uri_to_idx[uri] for uri in common_uris], dtype=np.int64)
 
 # Print shapes and types for debugging
-logger.info(f"Common IDs shape: {common_ids_int.shape}")
-logger.info(f"Common IDs type: {common_ids_int.dtype}")
+logger.info(f"Common indices shape: {common_indices.shape}")
+logger.info(f"Common indices type: {common_indices.dtype}")
 
 # Use MF embeddings as input (X) and BERT embeddings as target (Y)
-X = item_embeddings[common_ids_int]
-Y = np.array([bert_embeddings[tid] for tid in common_ids])
+X = item_embeddings[common_indices]
+Y = np.array([bert_embeddings[uri] for uri in common_uris])
 
 # Print shapes for debugging
 logger.info(f"X shape: {X.shape}")
 logger.info(f"Y shape: {Y.shape}")
+
+# Skip tracks with invalid embeddings
+valid_indices = []
+for i in range(len(X)):
+    if not np.isnan(X[i]).any() and not np.isnan(Y[i]).any():
+        valid_indices.append(i)
+
+if not valid_indices:
+    raise ValueError("No valid embeddings found after filtering!")
+
+X = X[valid_indices]
+Y = Y[valid_indices]
+common_uris = [common_uris[i] for i in valid_indices]
+
+logger.info(f"Number of valid embeddings after filtering: {len(valid_indices)}")
+logger.info(f"Final X shape: {X.shape}")
+logger.info(f"Final Y shape: {Y.shape}")
 
 # Convert to tensors
 X_tensor = torch.tensor(X, dtype=torch.float32)
@@ -229,7 +277,7 @@ with mlflow.start_run() as run:
         "hidden_dim": 256,
         "learning_rate": 1e-3,
         "epochs": 20,
-        "num_samples": len(common_ids)
+        "num_samples": len(common_uris)
     })
     
     input_dim = X_tensor.shape[1]
@@ -287,7 +335,7 @@ with mlflow.start_run() as run:
             np.savez(
                 projected_path,
                 embeddings=projected_embeddings,
-                track_ids=list(map(str, range(len(all_mf_embeddings))))
+                track_uris=list(map(str, common_uris))
             )
             mlflow.log_artifact(projected_path, "embeddings")
             logger.info(f"Projected embeddings saved to MinIO through MLflow run {run.info.run_id}")
