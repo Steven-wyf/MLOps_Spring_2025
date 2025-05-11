@@ -113,7 +113,7 @@ def load_track_mapping() -> Tuple[Dict[str, int], Dict[int, str]]:
     with tempfile.TemporaryDirectory() as tmp_dir:
         mapping_path = mlflow.artifacts.download_artifacts(
             run_id=bert_run_id,
-            artifact_path="mappings/track_uri_mapping.npz",
+            artifact_path="mappings/track_uri_mapping.npz",  # 确保与 BERT 保存的路径一致
             dst_path=tmp_dir
         )
         mapping_data = np.load(mapping_path)
@@ -125,6 +125,9 @@ def load_track_mapping() -> Tuple[Dict[str, int], Dict[int, str]]:
         idx_to_uri = {int(idx): str(uri) for uri, idx in zip(track_uris, track_ids)}
         
         logger.info(f"Loaded track mapping with {len(uri_to_idx)} tracks")
+        logger.info(f"Sample track URIs: {list(uri_to_idx.keys())[:3]}")
+        logger.info(f"Sample track IDs: {list(uri_to_idx.values())[:3]}")
+        
         return uri_to_idx, idx_to_uri
 
 class MatrixFactorization(nn.Module):
