@@ -133,6 +133,22 @@ def main():
     
     print("Starting MLflow run...")
     with mlflow.start_run() as run:
+        # Create and save track URI mapping
+        print("Creating track URI mapping...")
+        le = LabelEncoder()
+        track_indices = le.fit_transform(track_ids)
+        
+        # Save mapping
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            mapping_path = os.path.join(tmp_dir, "track_uri_mapping.npz")
+            np.savez(
+                mapping_path,
+                track_uris=le.classes_,
+                track_ids=np.arange(len(le.classes_))
+            )
+            mlflow.log_artifact(mapping_path, "mappings")
+            print(f"Saved track URI mapping with {len(le.classes_)} tracks")
+        
         for i in tqdm(range(0, len(track_ids), batch_size)):
             batch_ids = track_ids[i:i + batch_size]
             batch_texts = [track_data[tid] for tid in batch_ids]
