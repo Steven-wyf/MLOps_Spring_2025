@@ -1,6 +1,6 @@
 # LLaRA++ — A Cold-Start Music Recommendation System
 
-## 🎯 Value Proposition (Unit 1)
+##  Value Proposition (Unit 1)
 
 **Customer**: Music streaming platforms (e.g., Spotify) targeting new users with sparse interaction histories.
 
@@ -12,14 +12,14 @@
 * **Model size**: Final ONNX QInt8 LLaRA model ≈500MB.
 * **Deployment**: Up to 1K inference requests/hour in demo.
 
-## ⚙️ Cloud-Native Infrastructure (Unit 2/3)
+##  Cloud-Native Infrastructure (Unit 2/3)
 
 * Provisioned using Terraform + KVM in [`tf/`](./tf/).
 * MLflow & MinIO deployed via Helm + ArgoCD in [`k8s/platform`](./k8s/platform).
 * Services staged in `staging`, `canary`, `production` under [`k8s/`](./k8s).
 * CI/CD orchestration in [`ansible/`](./ansible).
 
-## 💾 Persistent Storage + Data (Unit 8 - Data Person)
+##  Persistent Storage + Data (Unit 8 - Data Person)
 
 * **Storage**: `/mnt/object/MLOps_Spring_2025`
 
@@ -45,7 +45,7 @@
 
 * **ETL + Embedding Scripts**: [`data_processing/`](./data_processing), [`train/bert_encoding.py`](./train/bert_encoding.py)
 
-## 🧠 Model Training (Unit 4/5 - Model Training Person)
+##  Model Training (Unit 4/5 - Model Training Person)
 
 * Inputs: Playlist (tracks), lyrics, artist names
 * Outputs: Recommended next-track logits
@@ -57,7 +57,7 @@
 * Re-training done via `docker-compose-training.yml`
 * Experiment tracking: [`mlflow`](http://129.114.25.37:5000)
 
-## 🚀 Model Serving (Unit 6/7 - Serving & Evaluation Person)
+##  Model Serving (Unit 6/7 - Serving & Evaluation Person)
 
 * Quantized to ONNX QInt8 (see `evaluation/templates`)
 * API in [`inference/inference_api.py`](./inference/inference_api.py)
@@ -67,13 +67,13 @@
 * Offline evaluation: [`evaluation`](./evaluation) folder
 * Load test results: logged via MLflow
 
-## 📉 Evaluation and Monitoring
+##  Evaluation and Monitoring
 
 * Offline metrics: Recall\@10, MRR\@10, Precision\@10
 * Online logging: API response latency, failure rates (FastAPI middleware)
 * Business-specific evaluation: genre diversity vs. retention rate
 
-## 🔁 CI/CD and Continuous Training (Unit 2/3)
+##  CI/CD and Continuous Training (Unit 2/3)
 
 * Infrastructure as Code: [`tf/`](./tf), [`k8s/`](./k8s), [`ansible/`](./ansible)
 * GitHub Actions trigger training/deployment (see CI script)
@@ -90,7 +90,7 @@
 
 ---
 
-## 🗂️ Folder Map
+##  Folder Map
 
 | Folder                 | Description                                        |
 | ---------------------- | -------------------------------------------------- |
@@ -105,7 +105,7 @@
 
 ---
 
-## 🔄 Run the System on Chameleon
+##  Run the System on Chameleon
 
 ```bash
 # Mount volumes (rclone/block)
