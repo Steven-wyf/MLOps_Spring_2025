@@ -3,26 +3,25 @@ version: '3.8'
 services:
   inference_api:
     build:
-      context: ..
-      dockerfile: inference/Dockerfile
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    volumes:
+      - /mnt/object:/mnt/object
+    networks:
+      - mlops-network
     environment:
       - MLFLOW_TRACKING_URI=http://mlflow:5000
       - MLFLOW_S3_ENDPOINT_URL=http://minio:9000
       - AWS_ACCESS_KEY_ID=admin
       - AWS_SECRET_ACCESS_KEY=hrwbqzUS85G253yKi43T
-    volumes:
-      - ..:/app
-      - /mnt/object:/mnt/object
-    ports:
-      - "0.0.0.0:8080:8080"
-    networks:
-      - mlops-network
-    restart: always
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/"]
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 40s
 
 networks:
   mlops-network:
