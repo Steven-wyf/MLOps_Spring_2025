@@ -1,0 +1,79 @@
+version: '3.8'
+
+services:
+  bert_train:
+    build:
+      context: ..
+      dockerfile: train/Dockerfile
+    environment:
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+      - MLFLOW_S3_ENDPOINT_URL=http://minio:9000
+      - AWS_ACCESS_KEY_ID=admin
+      - AWS_SECRET_ACCESS_KEY=hrwbqzUS85G253yKi43T
+    volumes:
+      - ..:/app
+      - /mnt/object:/mnt/object:ro
+    command: python train/bert_encoding.py
+    networks:
+      - mlops-network
+
+  matrix_factorization:
+    build:
+      context: ..
+      dockerfile: train/Dockerfile
+    environment:
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+      - MLFLOW_S3_ENDPOINT_URL=http://minio:9000
+      - AWS_ACCESS_KEY_ID=admin
+      - AWS_SECRET_ACCESS_KEY=hrwbqzUS85G253yKi43T
+    volumes:
+      - ..:/app
+      - /mnt/object:/mnt/object:ro
+    command: python train/matrix_factorization.py
+    depends_on:
+      bert_train:
+        condition: service_completed_successfully
+    networks:
+      - mlops-network
+
+  mlp_train:
+    build:
+      context: ..
+      dockerfile: train/Dockerfile
+    environment:
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+      - MLFLOW_S3_ENDPOINT_URL=http://minio:9000
+      - AWS_ACCESS_KEY_ID=admin
+      - AWS_SECRET_ACCESS_KEY=hrwbqzUS85G253yKi43T
+    volumes:
+      - ..:/app
+      - /mnt/object:/mnt/object:ro
+    command: python train/mlp_train.py
+    depends_on:
+      matrix_factorization:
+        condition: service_completed_successfully
+    networks:
+      - mlops-network
+
+  llara_train:
+    build:
+      context: ..
+      dockerfile: train/Dockerfile
+    environment:
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+      - MLFLOW_S3_ENDPOINT_URL=http://minio:9000
+      - AWS_ACCESS_KEY_ID=admin
+      - AWS_SECRET_ACCESS_KEY=hrwbqzUS85G253yKi43T
+    volumes:
+      - ..:/app
+      - /mnt/object:/mnt/object:ro
+    command: python train/llara_train.py
+    depends_on:
+      mlp_train:
+        condition: service_completed_successfully
+    networks:
+      - mlops-network
+
+networks:
+  mlops-network:
+    external: true 

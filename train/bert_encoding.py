@@ -17,7 +17,7 @@ AWS_SECRET_ACCESS_KEY = os.environ.get("AWS_SECRET_ACCESS_KEY", "hrwbqzUS85G253y
 EXPERIMENT_NAME = "bert-track-embeddings"
 
 # Data paths
-DATA_DIR = os.environ.get("PLAYLIST_DATA_DIR", "/mnt/block/processed")
+DATA_DIR = os.environ.get("PLAYLIST_DATA_DIR", "/mnt/object/processed")
 TRACK_JSON_PATH = os.path.join(DATA_DIR, "track_texts.json")  # JSON file with track information
 
 # Model parameters
