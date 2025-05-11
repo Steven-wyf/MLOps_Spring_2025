@@ -16,6 +16,7 @@ from torch.utils.data import DataLoader, TensorDataset
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, precision_recall_fscore_support, ndcg_score
 from typing import Dict, List, Tuple, Any
+from torch import optim
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -184,16 +185,22 @@ def load_playlist_data() -> pd.DataFrame:
 
 def create_training_pairs(df: pd.DataFrame, track_to_idx: Dict[str, int]) -> List[Tuple[int, int]]:
     """Create training pairs from playlist data"""
+    # 按播放列表ID分组，获取每个播放列表的歌曲列表
     playlists = df.groupby('playlist_id')['track_uri'].apply(list)
     samples = []
     
+    # 遍历每个播放列表
     for plist in playlists:
+        # 跳过长度小于2的播放列表
         if len(plist) < 2:
             continue
+        # 遍历播放列表中的每对相邻歌曲
         for i in range(1, len(plist)):
-            context = plist[i - 1]
-            target = plist[i]
+            context = plist[i - 1]  # 当前歌曲
+            target = plist[i]       # 下一首歌曲
+            # 确保两首歌曲都在 track mapping 中
             if context in track_to_idx and target in track_to_idx:
+                # 将 track URI 转换为索引，并添加到训练对中
                 samples.append((track_to_idx[context], track_to_idx[target]))
     
     return samples
@@ -344,79 +351,89 @@ def train_model(model, train_loader, val_loader, test_loader, device, num_classe
     return model, train_losses, val_losses, val_accuracies, metrics
 
 def main():
-    # Load data
-    logger.info("Loading embeddings and playlist data...")
-    # 1. 加载 BERT 的 track mapping
+    # Load track mapping from BERT
     uri_to_idx, idx_to_uri = load_track_mapping()
-    # 2. 加载 MLP 的 embeddings
-    emb_data = load_embeddings_from_mlflow()
-    # 3. 加载播放列表数据
-    df = load_playlist_data()
     
-    # Create training pairs using BERT's track mapping
-    logger.info("Creating training pairs...")
+    # Load embeddings from MLP
+    emb_data = load_embeddings_from_mlflow()
+    
+    # Load playlist data
+    DATA_DIR = os.path.expanduser(os.environ.get("PLAYLIST_DATA_DIR", "~/processed_data"))
+    df = pd.read_csv(os.path.join(DATA_DIR, "playlist_track_pairs.csv"))
+    
+    # Create training pairs
     samples = create_training_pairs(df, uri_to_idx)
     
-    # Prepare data
-    # 使用 BERT 的 track mapping 来获取 embeddings
-    X = emb_data['embeddings'][[uri_to_idx[i] for i, _ in samples]]
-    y = np.array([uri_to_idx[j] for _, j in samples])
+    # Create training data
+    X = emb_data['embeddings'][[i for i, _ in samples]]  # 使用 track IDs 作为索引
+    y = np.array([j for _, j in samples])
     
-    # Split data
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-    X_train, X_val, y_train, y_val = train_test_split(X_train, y_train, test_size=0.2, random_state=42)
-    
-    # Create data loaders
-    train_dataset = TensorDataset(torch.FloatTensor(X_train), torch.LongTensor(y_train))
-    val_dataset = TensorDataset(torch.FloatTensor(X_val), torch.LongTensor(y_val))
-    test_dataset = TensorDataset(torch.FloatTensor(X_test), torch.LongTensor(y_test))
-    
-    train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE)
-    test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE)
+    # Convert to tensors
+    X_tensor = torch.FloatTensor(X)
+    Y_tensor = torch.FloatTensor(y)
     
     # Initialize model
     input_dim = X.shape[1]
-    num_classes = len(uri_to_idx)  # 使用 BERT 的 track 数量
-    model = LlaRAClassifier(input_dim, num_classes, HIDDEN_DIM, DROPOUT).to(DEVICE)
+    output_dim = len(uri_to_idx)  # 输出维度是 track 的数量
+    model = LlaRAClassifier(input_dim, output_dim, HIDDEN_DIM, DROPOUT)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Using device: {device}")
+    model.to(device)
+    
+    # Training loop
+    criterion = nn.CrossEntropyLoss()
+    optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
+    epochs = EPOCHS
     
     # Train model
     with mlflow.start_run() as run:
         # Log parameters
         mlflow.log_params({
             "input_dim": input_dim,
-            "num_classes": num_classes,
+            "output_dim": output_dim,
             "hidden_dim": HIDDEN_DIM,
             "dropout": DROPOUT,
             "learning_rate": LEARNING_RATE,
             "weight_decay": WEIGHT_DECAY,
-            "epochs": EPOCHS,
-            "batch_size": BATCH_SIZE,
-            "num_samples": len(samples)
+            "epochs": epochs,
+            "num_samples": len(X)
         })
         
-        # Train and evaluate
-        best_model_state, metrics = train_model(model, train_loader, val_loader, test_loader, DEVICE, num_classes)
-        
-        # Log metrics
-        for metric_name, value in metrics.items():
-            mlflow.log_metric(metric_name, value)
+        model.train()
+        for epoch in tqdm(range(epochs), desc="Training LLARA Model"):
+            optimizer.zero_grad()
+            output = model(X_tensor)
+            loss = criterion(output, Y_tensor)
+            loss.backward()
+            optimizer.step()
+            
+            # Log metrics
+            mlflow.log_metric("loss", loss.item(), step=epoch)
+            logger.info(f"Epoch {epoch+1}: Loss = {loss.item():.4f}")
         
         # Save model
         with tempfile.TemporaryDirectory() as tmp_dir:
             model_path = os.path.join(tmp_dir, "llara_model.pt")
             torch.save({
-                "model_state": best_model_state,
+                "model_state": model.state_dict(),
                 "input_dim": input_dim,
-                "num_classes": num_classes,
+                "output_dim": output_dim,
                 "hidden_dim": HIDDEN_DIM,
                 "dropout": DROPOUT,
-                "mlflow_run_id": run.info.run_id,
-                "track_to_idx": uri_to_idx,  # 保存 BERT 的 track mapping
-                "idx_to_track": idx_to_uri   # 保存反向映射
+                "mlflow_run_id": run.info.run_id
             }, model_path)
             mlflow.log_artifact(model_path, "models")
             logger.info(f"Model saved to MinIO through MLflow run {run.info.run_id}")
+            
+            # Save track mapping
+            mapping_path = os.path.join(tmp_dir, "track_mapping.npz")
+            np.savez(
+                mapping_path,
+                uri_to_idx=uri_to_idx,
+                idx_to_uri=idx_to_uri
+            )
+            mlflow.log_artifact(mapping_path, "mappings")
+            logger.info("Track mapping saved to MLflow")
 
 if __name__ == "__main__":
     main() 
