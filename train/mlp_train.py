@@ -107,42 +107,19 @@ def load_embeddings_from_mlflow() -> Dict[str, Any]:
         # Download embeddings
         with tempfile.TemporaryDirectory() as tmp_dir:
             # Download embeddings
-            chunk_dir = mlflow.artifacts.download_artifacts(
+            embeddings_path = mlflow.artifacts.download_artifacts(
                 run_id=mf_run_id,
-                artifact_path="embeddings",
+                artifact_path="embeddings/item_embeddings.npz",
                 dst_path=tmp_dir
             )
             
-            # 遍历每个 chunk 目录
-            found_files = False
-            embeddings = None
-            track_ids = None
+            # Load embeddings
+            data = np.load(embeddings_path)
+            embeddings = data['item_embeddings']
+            track_uris = data['track_uris']
+            track_ids = data['track_ids']
             
-            for chunk_name in os.listdir(chunk_dir):
-                if chunk_name.startswith('chunk_'):
-                    chunk_path = os.path.join(chunk_dir, chunk_name)
-                    if os.path.isdir(chunk_path):
-                        # 在 chunk 目录中查找 .npz 文件
-                        for file_name in os.listdir(chunk_path):
-                            if file_name.endswith('.npz'):
-                                found_files = True
-                                file_path = os.path.join(chunk_path, file_name)
-                                try:
-                                    chunk_data = np.load(file_path, allow_pickle=True)
-                                    if embeddings is None:
-                                        embeddings = chunk_data['item_embeddings']  # 注意这里改为 item_embeddings
-                                        track_ids = chunk_data['track_ids']
-                                    else:
-                                        embeddings = np.concatenate([embeddings, chunk_data['item_embeddings']])
-                                        track_ids = np.concatenate([track_ids, chunk_data['track_ids']])
-                                except Exception as e:
-                                    logger.error(f"Error loading file {file_name}: {str(e)}")
-            
-            if not found_files:
-                raise Exception("No .npz files found in embeddings directory!")
-            
-            if embeddings is None:
-                raise Exception("No embeddings loaded!")
+            logger.info(f"Successfully loaded {len(track_uris)} embeddings")
             
             return {
                 'embeddings': embeddings,
