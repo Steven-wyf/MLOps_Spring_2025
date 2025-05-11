@@ -27,7 +27,7 @@ client = mlflow.tracking.MlflowClient()
 # Initialize MinIO client
 s3_client = boto3.client('s3',
     endpoint_url='http://minio:9000',
-    aws_access_key_id='admin',
+    aws_access_key_id='your-access-key ',
     aws_secret_access_key='hrwbqzUS85G253yKi43T'
 )
 
