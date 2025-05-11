@@ -5,6 +5,8 @@ services:
     build:
       context: ..
       dockerfile: inference/Dockerfile
+    container_name: inference_api
+    restart: unless-stopped
     ports:
       - "8080:8080"
     volumes:
@@ -22,6 +24,12 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 2G
 
 networks:
   mlops-network:
