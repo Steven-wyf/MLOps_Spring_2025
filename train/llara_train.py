@@ -415,9 +415,11 @@ def main():
         })
         
         model.train()
-        for epoch in tqdm(range(epochs), desc="Training LLARA Model"):
+        for epoch in range(epochs):
             epoch_loss = 0
-            for batch_X, batch_y in train_loader:
+            # 使用 tqdm 显示每个批次的进度
+            pbar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{epochs}")
+            for batch_X, batch_y in pbar:
                 # 移动批次数据到设备
                 batch_X = batch_X.to(device)
                 batch_y = batch_y.to(device)
@@ -429,6 +431,9 @@ def main():
                 optimizer.step()
                 
                 epoch_loss += loss.item()
+                
+                # 更新进度条显示当前损失
+                pbar.set_postfix({'loss': f'{loss.item():.4f}'})
             
             # 计算平均损失
             avg_loss = epoch_loss / len(train_loader)
