@@ -63,15 +63,25 @@ def load_embeddings_from_mlflow() -> Tuple[Dict[str, np.ndarray], np.ndarray, Di
 # Load input data
 bert_embeddings, item_embeddings, uri_to_idx = load_embeddings_from_mlflow()
 
+# Debug info
+logger.info(f"Sample BERT keys: {list(bert_embeddings.keys())[:3]}")
+logger.info(f"Sample MF URIs: {list(uri_to_idx.keys())[:3]}")
+logger.info(f"Sample MF indices: {list(uri_to_idx.values())[:3]}")
+
 common_uris = list(set(bert_embeddings.keys()) & set(uri_to_idx.keys()))
 if not common_uris:
     raise ValueError("No common track URIs found between BERT and MF embeddings")
+
+logger.info(f"Number of common URIs: {len(common_uris)}")
+logger.info(f"Sample common URIs: {common_uris[:3]}")
 
 X = np.array([item_embeddings[uri_to_idx[uri]] for uri in common_uris], dtype=np.float32)
 Y = np.array([bert_embeddings[uri] for uri in common_uris], dtype=np.float32)
 
 X_tensor = torch.tensor(X, dtype=torch.float32)
 Y_tensor = torch.tensor(Y, dtype=torch.float32)
+
+logger.info(f"X shape: {X.shape}, Y shape: {Y.shape}")
 
 class MLPProjector(nn.Module):
     def __init__(self, input_dim, output_dim, hidden_dim=256):
