@@ -414,13 +414,24 @@ def main():
             "num_samples": len(X)
         })
         
+        # 存储每个 epoch 的评估指标
+        evaluation_metrics = {
+            'epoch': [],
+            'loss': [],
+            'accuracy': [],
+            'precision': [],
+            'recall': [],
+            'f1': []
+        }
+        
         model.train()
         for epoch in range(epochs):
             epoch_loss = 0
-            # 使用 tqdm 显示每个批次的进度
             pbar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{epochs}")
+            
+            # 训练阶段
+            model.train()
             for batch_X, batch_y in pbar:
-                # 移动批次数据到设备
                 batch_X = batch_X.to(device)
                 batch_y = batch_y.to(device)
                 
@@ -431,19 +442,49 @@ def main():
                 optimizer.step()
                 
                 epoch_loss += loss.item()
-                
-                # 更新进度条显示当前损失
                 pbar.set_postfix({'loss': f'{loss.item():.4f}'})
             
-            # 计算平均损失
             avg_loss = epoch_loss / len(train_loader)
             
-            # Log metrics
+            # 评估阶段
+            model.eval()
+            all_preds = []
+            all_targets = []
+            with torch.no_grad():
+                for batch_X, batch_y in train_loader:
+                    batch_X = batch_X.to(device)
+                    batch_y = batch_y.to(device)
+                    output = model(batch_X)
+                    _, preds = torch.max(output, 1)
+                    all_preds.extend(preds.cpu().numpy())
+                    all_targets.extend(batch_y.cpu().numpy())
+            
+            # 计算评估指标
+            accuracy = accuracy_score(all_targets, all_preds)
+            precision, recall, f1, _ = precision_recall_fscore_support(
+                all_targets, all_preds, average='macro'
+            )
+            
+            # 存储指标
+            evaluation_metrics['epoch'].append(epoch + 1)
+            evaluation_metrics['loss'].append(avg_loss)
+            evaluation_metrics['accuracy'].append(accuracy)
+            evaluation_metrics['precision'].append(precision)
+            evaluation_metrics['recall'].append(recall)
+            evaluation_metrics['f1'].append(f1)
+            
+            # Log metrics to MLflow
             mlflow.log_metric("loss", avg_loss, step=epoch)
-            logger.info(f"Epoch {epoch+1}: Loss = {avg_loss:.4f}")
+            mlflow.log_metric("accuracy", accuracy, step=epoch)
+            mlflow.log_metric("precision", precision, step=epoch)
+            mlflow.log_metric("recall", recall, step=epoch)
+            mlflow.log_metric("f1", f1, step=epoch)
+            
+            logger.info(f"Epoch {epoch+1}: Loss = {avg_loss:.4f}, Accuracy = {accuracy:.4f}")
         
-        # Save model
+        # 保存评估结果到 MinIO
         with tempfile.TemporaryDirectory() as tmp_dir:
+            # 保存模型
             model_path = os.path.join(tmp_dir, "llara_model.pt")
             torch.save({
                 "model_state": model.state_dict(),
@@ -456,7 +497,14 @@ def main():
             mlflow.log_artifact(model_path, "models")
             logger.info(f"Model saved to MinIO through MLflow run {run.info.run_id}")
             
-            # Save track mapping
+            # 保存评估指标
+            metrics_path = os.path.join(tmp_dir, "evaluation_metrics.json")
+            with open(metrics_path, 'w') as f:
+                json.dump(evaluation_metrics, f, indent=4)
+            mlflow.log_artifact(metrics_path, "evaluation")
+            logger.info("Evaluation metrics saved to MinIO")
+            
+            # 保存 track mapping
             mapping_path = os.path.join(tmp_dir, "track_mapping.npz")
             np.savez(
                 mapping_path,
