@@ -94,6 +94,7 @@ batch_size = 256
 
 # Initialize model and optimizer
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print(f"Using device: {device}")
 model = MatrixFactorization(num_users, num_items, embedding_dim).to(device)
 optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 criterion = nn.MSELoss()
