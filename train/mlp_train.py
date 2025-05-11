@@ -54,7 +54,7 @@ def inspect_npz_file(file_path: str) -> None:
     except Exception as e:
         logger.error(f"Error inspecting npz file: {str(e)}")
 
-def load_embeddings_from_mlflow() -> Tuple[Dict[str, np.ndarray], Dict[str, np.ndarray]]:
+def load_embeddings_from_mlflow() -> Tuple[Dict[str, np.ndarray], Dict[str, np.ndarray], Dict[str, str]]:
     """Load BERT and MF embeddings from MLflow."""
     try:
         # Get latest run IDs
@@ -108,6 +108,7 @@ def load_embeddings_from_mlflow() -> Tuple[Dict[str, np.ndarray], Dict[str, np.n
             
             # Download MF embeddings (now in chunks)
             mf_embeddings = {}
+            track_id_mapping = {}  # 存储 track_id 到数字 ID 的映射
             chunk_idx = 0
             while True:
                 try:
@@ -132,6 +133,8 @@ def load_embeddings_from_mlflow() -> Tuple[Dict[str, np.ndarray], Dict[str, np.n
                                         try:
                                             chunk_data = np.load(file_path, allow_pickle=True)
                                             mf_embeddings.update({k: chunk_data[k] for k in chunk_data.files})
+                                            if 'track_ids' in chunk_data:
+                                                track_id_mapping.update({str(tid): str(idx) for idx, tid in enumerate(chunk_data['track_ids'])})
                                         except Exception as e:
                                             logger.error(f"Error loading MF file {file_name}: {str(e)}")
                     
@@ -147,7 +150,7 @@ def load_embeddings_from_mlflow() -> Tuple[Dict[str, np.ndarray], Dict[str, np.n
                         raise Exception(f"No MF embeddings found: {str(e)}")
                     break
         
-        return bert_embeddings, mf_embeddings
+        return bert_embeddings, mf_embeddings, track_id_mapping
     
     except Exception as e:
         logger.error(f"Error loading embeddings: {str(e)}")
@@ -155,7 +158,7 @@ def load_embeddings_from_mlflow() -> Tuple[Dict[str, np.ndarray], Dict[str, np.n
 
 # === Load input data ===
 logger.info("Loading embeddings from MLflow...")
-bert_embeddings, mf_embeddings = load_embeddings_from_mlflow()
+bert_embeddings, mf_embeddings, track_id_mapping = load_embeddings_from_mlflow()
 
 # Load track embeddings
 item_embeddings = mf_embeddings['item_embeddings']  # matrix [num_items, dim]
@@ -169,7 +172,7 @@ logger.info(f"Number of BERT embeddings: {len(bert_embeddings)}")
 logger.info(f"Sample BERT keys: {list(bert_embeddings.keys())[:5]}")
 
 # Align track IDs in both
-mf_ids = set(map(str, range(item_embeddings.shape[0])))
+mf_ids = set(track_id_mapping.values())
 bert_ids = set(bert_embeddings.keys())
 common_ids = list(mf_ids & bert_ids)
 common_ids = sorted(common_ids, key=int)  # ensure order
