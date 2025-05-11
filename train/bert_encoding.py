@@ -9,6 +9,12 @@ import tempfile
 from transformers import DistilBertTokenizer, DistilBertModel
 from tqdm import tqdm
 from pathlib import Path
+from sklearn.preprocessing import LabelEncoder
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # ---- CONFIG SECTION ---- #
 MLFLOW_TRACKING_URI = os.environ.get("MLFLOW_TRACKING_URI", "http://129.114.25.37:8000/")
@@ -34,6 +40,42 @@ os.environ["AWS_SECRET_ACCESS_KEY"] = AWS_SECRET_ACCESS_KEY
 
 mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
 mlflow.set_experiment(EXPERIMENT_NAME)
+
+def encode_tracks(tracks):
+    """Encode track URIs to integers using LabelEncoder."""
+    le = LabelEncoder()
+    track_ids = le.fit_transform(tracks)
+    
+    # Save the label encoder mapping
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        mapping_path = os.path.join(tmp_dir, "track_uri_mapping.npz")
+        np.savez(
+            mapping_path,
+            track_uris=le.classes_,
+            track_ids=np.arange(len(le.classes_))
+        )
+        mlflow.log_artifact(mapping_path, "mappings")
+        logger.info(f"Saved track URI mapping with {len(le.classes_)} tracks")
+    
+    return track_ids, le
+
+def process_tracks(tracks, embeddings):
+    """Process tracks and save embeddings with encoded IDs."""
+    # Encode track URIs
+    track_ids, le = encode_tracks(tracks)
+    
+    # Save embeddings with encoded IDs
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        embeddings_path = os.path.join(tmp_dir, "track_embeddings.npz")
+        np.savez(
+            embeddings_path,
+            embeddings=embeddings,
+            track_ids=track_ids
+        )
+        mlflow.log_artifact(embeddings_path, "embeddings")
+        logger.info(f"Saved embeddings for {len(track_ids)} tracks")
+    
+    return embeddings, track_ids
 
 def save_embeddings_to_minio(embeddings_dict, run_id):
     """Save embeddings to MinIO using MLflow"""

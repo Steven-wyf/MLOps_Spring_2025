@@ -39,7 +39,7 @@ def get_latest_run_id(experiment_name: str) -> str:
         raise ValueError(f"No successful runs found for experiment {experiment_name}")
     return runs.iloc[0].run_id
 
-def load_embeddings_from_mlflow() -> Tuple[Dict[str, np.ndarray], Dict[str, np.ndarray], Dict[str, int]]:
+def load_embeddings_from_mlflow() -> Tuple[Dict[str, np.ndarray], np.ndarray, Dict[str, int]]:
     """Load BERT and MF embeddings from MLflow."""
     try:
         # Get latest run IDs
@@ -48,118 +48,65 @@ def load_embeddings_from_mlflow() -> Tuple[Dict[str, np.ndarray], Dict[str, np.n
         
         # Download embeddings
         with tempfile.TemporaryDirectory() as tmp_dir:
-            # Download BERT embeddings (now in chunks)
+            # Download BERT embeddings
             bert_embeddings = {}
-            chunk_idx = 0
-            while True:
-                try:
-                    # 下载整个 embeddings 目录
-                    chunk_dir = mlflow.artifacts.download_artifacts(
-                        run_id=bert_run_id,
-                        artifact_path="embeddings",
-                        dst_path=tmp_dir
-                    )
-                    
-                    # 遍历每个 chunk 目录
-                    found_files = False
-                    for chunk_name in os.listdir(chunk_dir):
-                        if chunk_name.startswith('chunk_'):
-                            chunk_path = os.path.join(chunk_dir, chunk_name)
-                            if os.path.isdir(chunk_path):
-                                # 在 chunk 目录中查找 .npz 文件
-                                for file_name in os.listdir(chunk_path):
-                                    if file_name.endswith('.npz'):
-                                        found_files = True
-                                        file_path = os.path.join(chunk_path, file_name)
-                                        try:
-                                            chunk_data = np.load(file_path, allow_pickle=True)
-                                            bert_embeddings.update({k: chunk_data[k] for k in chunk_data.files})
-                                        except Exception as e:
-                                            logger.error(f"Error loading BERT file {file_name}: {str(e)}")
-                    
-                    if not found_files:
-                        logger.error("No .npz files found in BERT directory!")
-                    
-                    if not bert_embeddings and chunk_idx == 0:
-                        raise Exception("No BERT embeddings found")
-                    break
-                    
-                except Exception as e:
-                    if chunk_idx == 0:
-                        raise Exception(f"No BERT embeddings found: {str(e)}")
-                    break
+            chunk_dir = mlflow.artifacts.download_artifacts(
+                run_id=bert_run_id,
+                artifact_path="embeddings",
+                dst_path=tmp_dir
+            )
             
-            # Download MF embeddings (now in chunks)
+            for chunk in os.listdir(chunk_dir):
+                chunk_path = os.path.join(chunk_dir, chunk)
+                if os.path.isdir(chunk_path):
+                    for file in os.listdir(chunk_path):
+                        if file.endswith(".npz"):
+                            data = np.load(os.path.join(chunk_path, file), allow_pickle=True)
+                            bert_embeddings.update({k: data[k] for k in data.files})
+            
+            # Download MF embeddings
+            mf_dir = mlflow.artifacts.download_artifacts(
+                run_id=mf_run_id,
+                artifact_path="embeddings",
+                dst_path=tmp_dir
+            )
+            
             mf_embeddings = {}
-            track_uri_to_idx = {}  # 存储 track URI 到数字 ID 的映射
-            chunk_idx = 0
-            while True:
-                try:
-                    # 下载整个 embeddings 目录
-                    chunk_dir = mlflow.artifacts.download_artifacts(
-                        run_id=mf_run_id,
-                        artifact_path="embeddings",
-                        dst_path=tmp_dir
-                    )
-                    
-                    # 遍历每个 chunk 目录
-                    found_files = False
-                    for chunk_name in os.listdir(chunk_dir):
-                        if chunk_name.startswith('chunk_'):
-                            chunk_path = os.path.join(chunk_dir, chunk_name)
-                            if os.path.isdir(chunk_path):
-                                # 在 chunk 目录中查找 .npz 文件
-                                for file_name in os.listdir(chunk_path):
-                                    if file_name.endswith('.npz'):
-                                        found_files = True
-                                        file_path = os.path.join(chunk_path, file_name)
-                                        try:
-                                            chunk_data = np.load(file_path, allow_pickle=True)
-                                            mf_embeddings.update({k: chunk_data[k] for k in chunk_data.files})
-                                            
-                                            # 检查 track_uris 和 track_ids 的映射
-                                            if 'track_uris' in chunk_data and 'track_ids' in chunk_data:
-                                                track_uris = chunk_data['track_uris']
-                                                track_ids = chunk_data['track_ids']
-                                                
-                                                # 创建映射
-                                                for idx, (uri, tid) in enumerate(zip(track_uris, track_ids)):
-                                                    track_uri_to_idx[str(uri)] = int(tid)
-                                            
-                                        except Exception as e:
-                                            logger.error(f"Error loading MF file {file_name}: {str(e)}")
-                    
-                    if not found_files:
-                        logger.error("No .npz files found in MF directory!")
-                    
-                    if not mf_embeddings and chunk_idx == 0:
-                        raise Exception("No MF embeddings found")
-                    break
-                    
-                except Exception as e:
-                    if chunk_idx == 0:
-                        raise Exception(f"No MF embeddings found: {str(e)}")
-                    break
-        
-        return bert_embeddings, mf_embeddings, track_uri_to_idx
+            for chunk in os.listdir(mf_dir):
+                chunk_path = os.path.join(mf_dir, chunk)
+                if os.path.isdir(chunk_path):
+                    for file in os.listdir(chunk_path):
+                        if file.endswith(".npz"):
+                            data = np.load(os.path.join(chunk_path, file), allow_pickle=True)
+                            mf_embeddings.update({k: data[k] for k in data.files})
+            
+            # Load track mapping
+            mapping_path = mlflow.artifacts.download_artifacts(
+                run_id=bert_run_id,
+                artifact_path="mappings/track_uri_mapping.npz",
+                dst_path=tmp_dir
+            )
+            mapping_data = np.load(mapping_path)
+            track_uris = mapping_data['track_uris']
+            track_ids = mapping_data['track_ids']
+            uri_to_idx = {str(uri): int(idx) for uri, idx in zip(track_uris, track_ids)}
+            
+            return bert_embeddings, mf_embeddings['item_embeddings'], uri_to_idx
     
     except Exception as e:
         logger.error(f"Error loading embeddings: {str(e)}")
         raise
 
-# === Load input data ===
-bert_embeddings, mf_embeddings, track_uri_to_idx = load_embeddings_from_mlflow()
-
-# Load track embeddings
-item_embeddings = mf_embeddings['item_embeddings']  # matrix [num_items, dim]
+# Load input data
+bert_embeddings, item_embeddings, uri_to_idx = load_embeddings_from_mlflow()
 
 # Print sample embeddings
 logger.info(f"Sample BERT keys: {list(bert_embeddings.keys())[:3]}")
-logger.info(f"Sample MF URIs: {list(track_uri_to_idx.keys())[:3]}")
+logger.info(f"Sample MF URIs: {list(uri_to_idx.keys())[:3]}")
 
 # Align track IDs in both
 bert_uris = set(bert_embeddings.keys())
-mf_uris = set(track_uri_to_idx.keys())
+mf_uris = set(uri_to_idx.keys())
 common_uris = list(bert_uris & mf_uris)
 common_uris = sorted(common_uris)  # ensure order
 
@@ -167,7 +114,7 @@ if not common_uris:
     raise ValueError("No common URIs found between BERT and MF embeddings!")
 
 # Convert URIs to indices for MF embeddings
-common_indices = np.array([track_uri_to_idx[uri] for uri in common_uris], dtype=np.int64)
+common_indices = np.array([uri_to_idx[uri] for uri in common_uris], dtype=np.int64)
 
 # Use MF embeddings as input (X) and BERT embeddings as target (Y)
 X = item_embeddings[common_indices]

@@ -13,6 +13,7 @@ import tempfile
 from tqdm import tqdm
 import boto3
 import io
+from typing import Tuple, Dict
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -92,6 +93,40 @@ def save_embeddings_to_minio(embeddings_dict, run_id):
         
         print(f"All chunks processed. Total chunks: {len(chunks)}")
 
+def get_latest_run_id(experiment_name: str) -> str:
+    """Get the latest successful run ID for an experiment."""
+    runs = mlflow.search_runs(
+        experiment_names=[experiment_name],
+        filter_string="status = 'FINISHED'",
+        order_by=["start_time DESC"]
+    )
+    if runs.empty:
+        raise ValueError(f"No successful runs found for experiment {experiment_name}")
+    return runs.iloc[0].run_id
+
+def load_track_mapping() -> Tuple[Dict[str, int], Dict[int, str]]:
+    """Load the track URI to integer mapping from BERT encoding."""
+    # Get the latest BERT run
+    bert_run_id = get_latest_run_id("bert-track-embeddings")
+    
+    # Download the mapping
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        mapping_path = mlflow.artifacts.download_artifacts(
+            run_id=bert_run_id,
+            artifact_path="mappings/track_uri_mapping.npz",
+            dst_path=tmp_dir
+        )
+        mapping_data = np.load(mapping_path)
+        track_uris = mapping_data['track_uris']
+        track_ids = mapping_data['track_ids']
+        
+        # Create mapping dictionaries
+        uri_to_idx = {str(uri): int(idx) for uri, idx in zip(track_uris, track_ids)}
+        idx_to_uri = {int(idx): str(uri) for uri, idx in zip(track_uris, track_ids)}
+        
+        logger.info(f"Loaded track mapping with {len(uri_to_idx)} tracks")
+        return uri_to_idx, idx_to_uri
+
 class MatrixFactorization(nn.Module):
     def __init__(self, num_users, num_items, embedding_dim):
         super(MatrixFactorization, self).__init__()
@@ -107,157 +142,146 @@ class MatrixFactorization(nn.Module):
         item_emb = self.item_embedding(item_ids)
         return torch.sum(user_emb * item_emb, dim=1)
 
-# Load and preprocess data
-DATA_DIR = os.path.expanduser(os.environ.get("PLAYLIST_DATA_DIR", "~/processed_data"))
-df = pd.read_csv(os.path.join(DATA_DIR, "playlist_track_pairs.csv"))
-user_encoder = LabelEncoder()
-item_encoder = LabelEncoder()
-
-df['user_id'] = user_encoder.fit_transform(df['playlist_id'])
-df['item_id'] = item_encoder.fit_transform(df['track_uri'])
-
-# Split data
-train_df, test_df = train_test_split(df, test_size=0.2, random_state=42)
-
-# Model parameters
-num_users = len(user_encoder.classes_)
-num_items = len(item_encoder.classes_)
-embedding_dim = 32
-learning_rate = 0.001
-epochs = 10
-batch_size = 256
-
-# Initialize model and optimizer
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-print(f"Using device: {device}")
-model = MatrixFactorization(num_users, num_items, embedding_dim).to(device)
-optimizer = optim.Adam(model.parameters(), lr=learning_rate)
-criterion = nn.MSELoss()
-
-# Training loop with MLflow
-with mlflow.start_run() as run:
-    # Log parameters
-    mlflow.log_params({
-        "embedding_dim": embedding_dim,
-        "learning_rate": learning_rate,
-        "epochs": epochs,
-        "batch_size": batch_size,
-        "num_users": num_users,
-        "num_items": num_items
-    })
+def main():
+    # Load track mapping from BERT
+    uri_to_idx, idx_to_uri = load_track_mapping()
     
-    model.train()
-    for epoch in tqdm(range(epochs), desc="Training Matrix Factorization"):
-        total_loss = 0
-        num_batches = 0
-        
-        # Process in batches
-        for i in range(0, len(train_df), batch_size):
-            batch = train_df.iloc[i:i+batch_size]
-            
-            # Prepare batch data
-            user_ids = torch.tensor(batch['user_id'].values, dtype=torch.long).to(device)
-            item_ids = torch.tensor(batch['item_id'].values, dtype=torch.long).to(device)
-            ratings = torch.ones(len(batch), dtype=torch.float).to(device)  # Implicit feedback
-            
-            # Forward pass
-            predictions = model(user_ids, item_ids)
-            loss = criterion(predictions, ratings)
-            
-            # Backward pass
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-            
-            total_loss += loss.item()
-            num_batches += 1
-        
-        # Log metrics
-        avg_loss = total_loss / num_batches
-        mlflow.log_metric("loss", avg_loss, step=epoch)
-        logger.info(f"Epoch {epoch+1}/{epochs}, Loss: {avg_loss:.4f}")
+    # Load and preprocess data
+    DATA_DIR = os.path.expanduser(os.environ.get("PLAYLIST_DATA_DIR", "~/processed_data"))
+    df = pd.read_csv(os.path.join(DATA_DIR, "playlist_track_pairs.csv"))
     
-    # Evaluation
-    logger.info("Starting evaluation...")
-    model.eval()
+    # Use BERT's track mapping
+    df['item_id'] = df['track_uri'].map(uri_to_idx)
+    df = df.dropna(subset=['item_id'])  # Remove tracks not in BERT mapping
     
-    # Use only positive interactions for evaluation
-    eval_df = test_df.copy()
+    # Encode users
+    user_encoder = LabelEncoder()
+    df['user_id'] = user_encoder.fit_transform(df['playlist_id'])
     
-    # Prepare evaluation data
-    user_ids = torch.tensor(eval_df["user_id"].values, dtype=torch.long).to(device)
-    item_ids = torch.tensor(eval_df["item_id"].values, dtype=torch.long).to(device)
-    labels = torch.ones(len(eval_df), dtype=torch.float32).to(device)  # All positive interactions
-
-    # Batch evaluation
-    eval_batch_size = 1024  # Can be adjusted based on available memory
-    all_preds = []
-    all_labels = []
+    # Split data
+    train_df, test_df = train_test_split(df, test_size=0.2, random_state=42)
     
-    for i in tqdm(range(0, len(eval_df), eval_batch_size), desc="Evaluating"):
-        batch_user_ids = user_ids[i:i+eval_batch_size]
-        batch_item_ids = item_ids[i:i+eval_batch_size]
-        batch_labels = labels[i:i+eval_batch_size]
-
-        # Get predictions
-        with torch.no_grad():
-            preds = model(batch_user_ids, batch_item_ids)
-        
-        # Store predictions and labels
-        all_preds.append(preds.cpu().numpy())
-        all_labels.append(batch_labels.cpu().numpy())
+    # Model parameters
+    num_users = len(user_encoder.classes_)
+    num_items = len(uri_to_idx)  # Use BERT's number of items
+    embedding_dim = 32
+    learning_rate = 0.001
+    epochs = 10
+    batch_size = 256
     
-    # Concatenate all batches
-    preds_np = np.concatenate(all_preds)
-    labels_np = np.concatenate(all_labels)
-
-    # Calculate metrics
-    rmse = np.sqrt(mean_squared_error(labels_np, preds_np))
-    avg_prec = average_precision_score(labels_np, preds_np)
-
-    # Log evaluation metrics
-    mlflow.log_metrics({
-        "test_rmse": rmse,
-        "test_avg_precision": avg_prec
-    })
-
-    # Print evaluation results
-    logger.info(f"Test RMSE: {rmse:.4f}")
-    logger.info(f"Test Average Precision: {avg_prec:.4f}")
+    # Initialize model and optimizer
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    logger.info(f"Using device: {device}")
+    model = MatrixFactorization(num_users, num_items, embedding_dim).to(device)
+    optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+    criterion = nn.MSELoss()
     
-    # Save model to MinIO through MLflow
-    with tempfile.TemporaryDirectory() as tmp_dir:
-        # Save model
-        model_path = os.path.join(tmp_dir, "mf_model.pt")
-        torch.save({
-            "model_state": model.state_dict(),
-            "num_users": num_users,
-            "num_items": num_items,
-            "embedding_dim": embedding_dim
-        }, model_path)
-        mlflow.log_artifact(model_path, "models")
-        logger.info(f"Model saved to MinIO through MLflow run {run.info.run_id}")
-        
-        # Save embeddings in chunks
-        logger.info("Saving embeddings in chunks...")
-        embeddings_dict = {
-            'user_embeddings': model.user_embedding.weight.detach().cpu().numpy(),
-            'item_embeddings': model.item_embedding.weight.detach().cpu().numpy(),
-            'user_mapping': dict(enumerate(user_encoder.classes_)),
-            'item_mapping': dict(enumerate(item_encoder.classes_))
-        }
-        save_embeddings_to_minio(embeddings_dict, run.info.run_id)
-        
-        # Save model info
-        model_info_path = os.path.join(tmp_dir, "mf_model_info.pt")
-        torch.save({
-            "num_users": num_users,
-            "num_items": num_items,
+    # Training loop with MLflow
+    with mlflow.start_run() as run:
+        # Log parameters
+        mlflow.log_params({
             "embedding_dim": embedding_dim,
-            "mlflow_run_id": run.info.run_id,
-            "test_rmse": float(rmse),
-            "test_avg_precision": float(avg_prec)
-        }, model_info_path)
-        mlflow.log_artifact(model_info_path, "models")
+            "learning_rate": learning_rate,
+            "epochs": epochs,
+            "batch_size": batch_size,
+            "num_users": num_users,
+            "num_items": num_items
+        })
+        
+        model.train()
+        for epoch in tqdm(range(epochs), desc="Training Matrix Factorization"):
+            total_loss = 0
+            num_batches = 0
+            
+            # Process in batches
+            for i in range(0, len(train_df), batch_size):
+                batch = train_df.iloc[i:i+batch_size]
+                
+                # Prepare batch data
+                user_ids = torch.tensor(batch['user_id'].values, dtype=torch.long).to(device)
+                item_ids = torch.tensor(batch['item_id'].values, dtype=torch.long).to(device)
+                ratings = torch.ones(len(batch), dtype=torch.float).to(device)  # Implicit feedback
+                
+                # Forward pass
+                predictions = model(user_ids, item_ids)
+                loss = criterion(predictions, ratings)
+                
+                # Backward pass
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+                
+                total_loss += loss.item()
+                num_batches += 1
+            
+            # Log metrics
+            avg_loss = total_loss / num_batches
+            mlflow.log_metric("loss", avg_loss, step=epoch)
+            logger.info(f"Epoch {epoch+1}/{epochs}, Loss: {avg_loss:.4f}")
+        
+        # Evaluation
+        logger.info("Starting evaluation...")
+        model.eval()
+        
+        # Prepare evaluation data
+        user_ids = torch.tensor(test_df["user_id"].values, dtype=torch.long).to(device)
+        item_ids = torch.tensor(test_df["item_id"].values, dtype=torch.long).to(device)
+        labels = torch.ones(len(test_df), dtype=torch.float32).to(device)
+        
+        # Batch evaluation
+        eval_batch_size = 1024
+        all_preds = []
+        all_labels = []
+        
+        for i in tqdm(range(0, len(test_df), eval_batch_size), desc="Evaluating"):
+            batch_user_ids = user_ids[i:i+eval_batch_size]
+            batch_item_ids = item_ids[i:i+eval_batch_size]
+            batch_labels = labels[i:i+eval_batch_size]
+            
+            with torch.no_grad():
+                preds = model(batch_user_ids, batch_item_ids)
+            
+            all_preds.append(preds.cpu().numpy())
+            all_labels.append(batch_labels.cpu().numpy())
+        
+        # Calculate metrics
+        preds_np = np.concatenate(all_preds)
+        labels_np = np.concatenate(all_labels)
+        rmse = np.sqrt(mean_squared_error(labels_np, preds_np))
+        avg_prec = average_precision_score(labels_np, preds_np)
+        
+        # Log evaluation metrics
+        mlflow.log_metrics({
+            "test_rmse": rmse,
+            "test_avg_precision": avg_prec
+        })
+        
+        logger.info(f"Test RMSE: {rmse:.4f}")
+        logger.info(f"Test Average Precision: {avg_prec:.4f}")
+        
+        # Save model and embeddings
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            # Save model
+            model_path = os.path.join(tmp_dir, "mf_model.pt")
+            torch.save({
+                "model_state": model.state_dict(),
+                "num_users": num_users,
+                "num_items": num_items,
+                "embedding_dim": embedding_dim
+            }, model_path)
+            mlflow.log_artifact(model_path, "models")
+            
+            # Save embeddings with BERT's track mapping
+            embeddings_path = os.path.join(tmp_dir, "item_embeddings.npz")
+            np.savez(
+                embeddings_path,
+                item_embeddings=model.item_embedding.weight.detach().cpu().numpy(),
+                track_uris=list(uri_to_idx.keys()),
+                track_ids=list(uri_to_idx.values())
+            )
+            mlflow.log_artifact(embeddings_path, "embeddings")
+            
+            logger.info(f"Saved model and embeddings to MLflow run {run.info.run_id}")
 
-logger.info("Training and evaluation completed successfully!") 
+if __name__ == "__main__":
+    main() 
