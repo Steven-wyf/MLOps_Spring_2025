@@ -241,8 +241,8 @@ with mlflow.start_run() as run:
         # Save embeddings in chunks
         logger.info("Saving embeddings in chunks...")
         embeddings_dict = {
-            'user_embeddings': model.user_embedding.weight.cpu().numpy(),
-            'item_embeddings': model.item_embedding.weight.cpu().numpy(),
+            'user_embeddings': model.user_embedding.weight.detach().cpu().numpy(),
+            'item_embeddings': model.item_embedding.weight.detach().cpu().numpy(),
             'user_mapping': dict(enumerate(user_encoder.classes_)),
             'item_mapping': dict(enumerate(item_encoder.classes_))
         }
