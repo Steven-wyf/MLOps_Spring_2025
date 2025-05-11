@@ -7,7 +7,7 @@ import mlflow
 import os
 import logging
 import tempfile
-from typing import Tuple, Dict
+from typing import Tuple, Dict, Any
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -39,187 +39,184 @@ def get_latest_run_id(experiment_name: str) -> str:
         raise ValueError(f"No successful runs found for experiment {experiment_name}")
     return runs.iloc[0].run_id
 
-def load_embeddings_from_mlflow() -> Tuple[Dict[str, np.ndarray], np.ndarray, Dict[str, int]]:
-    """Load BERT and MF embeddings from MLflow."""
+def load_track_mapping() -> Tuple[Dict[str, int], Dict[int, str]]:
+    """Load the track URI to integer mapping from BERT encoding."""
+    # Get the latest BERT run ID
+    bert_run_id = get_latest_run_id("bert-track-embeddings")
+    logger.info(f"Loading track mapping from BERT run {bert_run_id}")
+    
+    # Download and load mapping info
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        # Load mapping info
+        info_path = mlflow.artifacts.download_artifacts(
+            run_id=bert_run_id,
+            artifact_path="mappings/mapping_info.npz",
+            dst_path=tmp_dir
+        )
+        info_data = np.load(info_path)
+        total_tracks = int(info_data['total_tracks'])
+        num_chunks = int(info_data['num_chunks'])
+        chunk_size = int(info_data['chunk_size'])
+        
+        logger.info(f"Loading {total_tracks} tracks from {num_chunks} chunks")
+        
+        # Initialize mapping dictionaries
+        uri_to_idx = {}
+        idx_to_uri = {}
+        
+        # Load each chunk
+        for i in range(num_chunks):
+            logger.info(f"Loading chunk {i+1}/{num_chunks}...")
+            chunk_dir = mlflow.artifacts.download_artifacts(
+                run_id=bert_run_id,
+                artifact_path=f"mappings/chunk_{i}",
+                dst_path=tmp_dir
+            )
+            
+            # Find the .npz file in the chunk directory
+            chunk_files = [f for f in os.listdir(chunk_dir) if f.endswith('.npz')]
+            if not chunk_files:
+                raise FileNotFoundError(f"No .npz file found in chunk directory: {chunk_dir}")
+            
+            chunk_path = os.path.join(chunk_dir, chunk_files[0])
+            chunk_data = np.load(chunk_path)
+            
+            # Get chunk data
+            chunk_uris = chunk_data['track_uris']
+            chunk_ids = chunk_data['track_ids']
+            
+            # Update mapping dictionaries
+            for uri, idx in zip(chunk_uris, chunk_ids):
+                uri_str = str(uri)
+                idx_int = int(idx)
+                uri_to_idx[uri_str] = idx_int
+                idx_to_uri[idx_int] = uri_str
+            
+            logger.info(f"Loaded {len(chunk_uris)} tracks from chunk {i+1}")
+        
+        logger.info(f"Successfully loaded {len(uri_to_idx)} tracks")
+        return uri_to_idx, idx_to_uri
+
+def load_embeddings_from_mlflow() -> Dict[str, Any]:
+    """Load the latest MLP projected embeddings from MLflow"""
     try:
-        # Get latest run IDs
-        bert_run_id = get_latest_run_id("bert-track-embeddings")
-        mf_run_id = get_latest_run_id("matrix-factorization")
+        # Get latest MLP run ID
+        mlp_run_id = get_latest_run_id("mlp-projector")
+        logger.info(f"Loading embeddings from MLP run {mlp_run_id}")
         
         # Download embeddings
         with tempfile.TemporaryDirectory() as tmp_dir:
-            # Download BERT embeddings
-            bert_embeddings = {}
+            # Download projected embeddings
             chunk_dir = mlflow.artifacts.download_artifacts(
-                run_id=bert_run_id,
+                run_id=mlp_run_id,
                 artifact_path="embeddings",
                 dst_path=tmp_dir
             )
             
-            for chunk in os.listdir(chunk_dir):
-                chunk_path = os.path.join(chunk_dir, chunk)
-                if os.path.isdir(chunk_path):
-                    for file in os.listdir(chunk_path):
-                        if file.endswith(".npz"):
-                            data = np.load(os.path.join(chunk_path, file), allow_pickle=True)
-                            bert_embeddings.update({k: data[k] for k in data.files})
+            # 遍历每个 chunk 目录
+            found_files = False
+            embeddings = None
+            track_ids = None
             
-            # Download MF embeddings
-            mf_dir = mlflow.artifacts.download_artifacts(
-                run_id=mf_run_id,
-                artifact_path="embeddings",
-                dst_path=tmp_dir
-            )
+            for chunk_name in os.listdir(chunk_dir):
+                if chunk_name.startswith('chunk_'):
+                    chunk_path = os.path.join(chunk_dir, chunk_name)
+                    if os.path.isdir(chunk_path):
+                        # 在 chunk 目录中查找 .npz 文件
+                        for file_name in os.listdir(chunk_path):
+                            if file_name.endswith('.npz'):
+                                found_files = True
+                                file_path = os.path.join(chunk_path, file_name)
+                                try:
+                                    chunk_data = np.load(file_path, allow_pickle=True)
+                                    if embeddings is None:
+                                        embeddings = chunk_data['embeddings']
+                                        track_ids = chunk_data['track_ids']
+                                    else:
+                                        embeddings = np.concatenate([embeddings, chunk_data['embeddings']])
+                                        track_ids = np.concatenate([track_ids, chunk_data['track_ids']])
+                                except Exception as e:
+                                    logger.error(f"Error loading file {file_name}: {str(e)}")
             
-            mf_embeddings = {}
-            for chunk in os.listdir(mf_dir):
-                chunk_path = os.path.join(mf_dir, chunk)
-                if os.path.isdir(chunk_path):
-                    for file in os.listdir(chunk_path):
-                        if file.endswith(".npz"):
-                            data = np.load(os.path.join(chunk_path, file), allow_pickle=True)
-                            mf_embeddings.update({k: data[k] for k in data.files})
+            if not found_files:
+                raise Exception("No .npz files found in embeddings directory!")
             
-            # Load track mapping
-            mapping_path = mlflow.artifacts.download_artifacts(
-                run_id=bert_run_id,
-                artifact_path="mappings/track_uri_mapping.npz",
-                dst_path=tmp_dir
-            )
-            mapping_data = np.load(mapping_path)
-            track_uris = mapping_data['track_uris']
-            track_ids = mapping_data['track_ids']
-            uri_to_idx = {str(uri): int(idx) for uri, idx in zip(track_uris, track_ids)}
+            if embeddings is None:
+                raise Exception("No embeddings loaded!")
             
-            return bert_embeddings, mf_embeddings['item_embeddings'], uri_to_idx
+            return {
+                'embeddings': embeddings,
+                'track_ids': track_ids
+            }
     
     except Exception as e:
         logger.error(f"Error loading embeddings: {str(e)}")
         raise
 
-# Load input data
-bert_embeddings, item_embeddings, uri_to_idx = load_embeddings_from_mlflow()
-
-# Print sample embeddings
-logger.info(f"Sample BERT keys: {list(bert_embeddings.keys())[:3]}")
-logger.info(f"Sample MF URIs: {list(uri_to_idx.keys())[:3]}")
-
-# Align track IDs in both
-bert_uris = set(bert_embeddings.keys())
-mf_uris = set(uri_to_idx.keys())
-common_uris = list(bert_uris & mf_uris)
-common_uris = sorted(common_uris)  # ensure order
-
-if not common_uris:
-    raise ValueError("No common URIs found between BERT and MF embeddings!")
-
-# Convert URIs to indices for MF embeddings
-common_indices = np.array([uri_to_idx[uri] for uri in common_uris], dtype=np.int64)
-
-# Use MF embeddings as input (X) and BERT embeddings as target (Y)
-X = item_embeddings[common_indices]
-Y = np.array([bert_embeddings[uri] for uri in common_uris])
-
-# Skip tracks with invalid embeddings
-valid_indices = []
-for i in range(len(X)):
-    if not np.isnan(X[i]).any() and not np.isnan(Y[i]).any():
-        valid_indices.append(i)
-
-if not valid_indices:
-    raise ValueError("No valid embeddings found after filtering!")
-
-X = X[valid_indices]
-Y = Y[valid_indices]
-common_uris = [common_uris[i] for i in valid_indices]
-
-# Convert to tensors
-X_tensor = torch.tensor(X, dtype=torch.float32)
-Y_tensor = torch.tensor(Y, dtype=torch.float32)
-
-# === Define MLP Projector ===
-class MLPProjector(nn.Module):
-    def __init__(self, input_dim, output_dim, hidden_dim=256):
-        super().__init__()
-        self.net = nn.Sequential(
-            nn.Linear(input_dim, hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, output_dim)
-        )
-
-    def forward(self, x):
-        return self.net(x)
-
-# === Train MLP ===
-with mlflow.start_run() as run:
-    # Log parameters
-    mlflow.log_params({
-        "input_dim": X_tensor.shape[1],  # MF embedding dimension
-        "output_dim": Y_tensor.shape[1],  # BERT embedding dimension
-        "hidden_dim": 256,
-        "learning_rate": 1e-3,
-        "epochs": 20,
-        "num_samples": len(common_uris)
-    })
+def main():
+    # Load track mapping from BERT
+    uri_to_idx, idx_to_uri = load_track_mapping()
     
-    input_dim = X_tensor.shape[1]
+    # Load embeddings from MLP
+    emb_data = load_embeddings_from_mlflow()
+    
+    # Create training data
+    X = emb_data['embeddings']
+    y = np.array([uri_to_idx[track_id] for track_id in emb_data['track_ids']])
+    
+    # Convert to tensors
+    X_tensor = torch.FloatTensor(X)
+    Y_tensor = torch.FloatTensor(y)
+    
+    # Initialize model
+    input_dim = X.shape[1]
     output_dim = Y_tensor.shape[1]
     model = MLPProjector(input_dim, output_dim)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
     model.to(device)
-
-    X_tensor = X_tensor.to(device)
-    Y_tensor = Y_tensor.to(device)
-
+    
+    # Training loop
     criterion = nn.MSELoss()
     optimizer = optim.Adam(model.parameters(), lr=1e-3)
     epochs = 20
-
-    model.train()
-    for epoch in tqdm(range(epochs), desc="Training MLP Projector"):
-        optimizer.zero_grad()
-        output = model(X_tensor)
-        loss = criterion(output, Y_tensor)
-        loss.backward()
-        optimizer.step()
-
-        # Log metrics
-        mlflow.log_metric("loss", loss.item(), step=epoch)
-        logger.info(f"Epoch {epoch+1}: Loss = {loss.item():.4f}")
-
-    # Save model to MinIO through MLflow
-    with tempfile.TemporaryDirectory() as tmp_dir:
-        model_path = os.path.join(tmp_dir, "mlp_projector.pt")
-        torch.save({
-            "model_state": model.state_dict(),
+    
+    # Train model
+    with mlflow.start_run() as run:
+        # Log parameters
+        mlflow.log_params({
             "input_dim": input_dim,
             "output_dim": output_dim,
             "hidden_dim": 256,
-            "mlflow_run_id": run.info.run_id
-        }, model_path)
-        mlflow.log_artifact(model_path, "models")
-        logger.info(f"Model saved to MinIO through MLflow run {run.info.run_id}")
+            "learning_rate": 1e-3,
+            "epochs": 20,
+            "num_samples": len(X)
+        })
         
-        # Generate projected embeddings for all tracks
-        logger.info("Generating projected embeddings...")
-        model.eval()
-        with torch.no_grad():
-            # Get all MF embeddings
-            all_mf_embeddings = item_embeddings
-            all_mf_embeddings = torch.tensor(all_mf_embeddings, dtype=torch.float32).to(device)
+        model.train()
+        for epoch in tqdm(range(epochs), desc="Training MLP Projector"):
+            optimizer.zero_grad()
+            output = model(X_tensor)
+            loss = criterion(output, Y_tensor)
+            loss.backward()
+            optimizer.step()
             
-            # Project embeddings
-            projected_embeddings = model(all_mf_embeddings).cpu().numpy()
-            
-            # Save projected embeddings
-            projected_path = os.path.join(tmp_dir, "projected_embeddings.npz")
-            np.savez(
-                projected_path,
-                embeddings=projected_embeddings,
-                track_uris=list(map(str, common_uris))
-            )
-            mlflow.log_artifact(projected_path, "embeddings")
-            logger.info(f"Projected embeddings saved to MinIO through MLflow run {run.info.run_id}")
+            # Log metrics
+            mlflow.log_metric("loss", loss.item(), step=epoch)
+            logger.info(f"Epoch {epoch+1}: Loss = {loss.item():.4f}")
+        
+        # Save model
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model_path = os.path.join(tmp_dir, "mlp_projector.pt")
+            torch.save({
+                "model_state": model.state_dict(),
+                "input_dim": input_dim,
+                "output_dim": output_dim,
+                "hidden_dim": 256,
+                "mlflow_run_id": run.info.run_id
+            }, model_path)
+            mlflow.log_artifact(model_path, "models")
+            logger.info(f"Model saved to MinIO through MLflow run {run.info.run_id}")
 
-logger.info("Training completed successfully!")
+if __name__ == "__main__":
+    main()
