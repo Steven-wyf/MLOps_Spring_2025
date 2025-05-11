@@ -129,6 +129,18 @@ def load_embeddings_from_mlflow() -> Dict[str, Any]:
         logger.error(f"Error loading embeddings: {str(e)}")
         raise
 
+class MLPProjector(nn.Module):
+    def __init__(self, input_dim, hidden_dim=256):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(input_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, 1)  # 输出维度为1
+        )
+
+    def forward(self, x):
+        return self.net(x)
+
 def main():
     # Load track mapping from BERT
     uri_to_idx, idx_to_uri = load_track_mapping()
@@ -143,12 +155,11 @@ def main():
     
     # Convert to tensors
     X_tensor = torch.FloatTensor(X)
-    Y_tensor = torch.FloatTensor(y)
+    Y_tensor = torch.FloatTensor(y).unsqueeze(1)  # 添加一个维度，使其形状为 [batch_size, 1]
     
     # Initialize model
     input_dim = X.shape[1]
-    output_dim = Y_tensor.shape[1]
-    model = MLPProjector(input_dim, output_dim)
+    model = MLPProjector(input_dim)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
     model.to(device)
@@ -163,7 +174,6 @@ def main():
         # Log parameters
         mlflow.log_params({
             "input_dim": input_dim,
-            "output_dim": output_dim,
             "hidden_dim": 256,
             "learning_rate": 1e-3,
             "epochs": 20,
@@ -188,7 +198,6 @@ def main():
             torch.save({
                 "model_state": model.state_dict(),
                 "input_dim": input_dim,
-                "output_dim": output_dim,
                 "hidden_dim": 256,
                 "mlflow_run_id": run.info.run_id
             }, model_path)
