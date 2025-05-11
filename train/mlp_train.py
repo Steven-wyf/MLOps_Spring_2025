@@ -61,20 +61,37 @@ def load_embeddings_from_mlflow() -> Tuple[Dict[str, np.ndarray], Dict[str, np.n
                         artifact_path="embeddings",
                         dst_path=tmp_dir
                     )
+                    print(f"Downloaded BERT artifacts to: {chunk_dir}")
+                    
+                    # 检查目录结构
+                    print("\nBERT Directory structure:")
+                    for root, dirs, files in os.walk(chunk_dir):
+                        level = root.replace(chunk_dir, '').count(os.sep)
+                        indent = ' ' * 4 * level
+                        print(f"{indent}{os.path.basename(root)}/")
+                        subindent = ' ' * 4 * (level + 1)
+                        for f in files:
+                            print(f"{subindent}{f}")
                     
                     # 递归查找所有文件
+                    found_files = False
                     for root, dirs, files in os.walk(chunk_dir):
                         for file_name in files:
                             if file_name.startswith('chunk_'):
+                                found_files = True
                                 file_path = os.path.join(root, file_name)
-                                print(f"Loading BERT file: {file_path}")
+                                print(f"\nTrying to load BERT file: {file_path}")
                                 try:
                                     chunk_data = np.load(file_path)
-                                    print(f"BERT file contents: {chunk_data.files}")
+                                    print(f"Successfully loaded file. Contents: {chunk_data.files}")
                                     bert_embeddings.update({k: chunk_data[k] for k in chunk_data.files})
                                     logger.info(f"Loaded BERT chunk from {file_name}")
                                 except Exception as e:
                                     print(f"Error loading BERT file {file_name}: {str(e)}")
+                    
+                    if not found_files:
+                        print("\nNo chunk files found in BERT directory!")
+                        print("Available files:", os.listdir(chunk_dir))
                     
                     if not bert_embeddings and chunk_idx == 0:
                         raise Exception("No BERT embeddings found")
@@ -96,20 +113,37 @@ def load_embeddings_from_mlflow() -> Tuple[Dict[str, np.ndarray], Dict[str, np.n
                         artifact_path="embeddings",
                         dst_path=tmp_dir
                     )
+                    print(f"\nDownloaded MF artifacts to: {chunk_dir}")
+                    
+                    # 检查目录结构
+                    print("\nMF Directory structure:")
+                    for root, dirs, files in os.walk(chunk_dir):
+                        level = root.replace(chunk_dir, '').count(os.sep)
+                        indent = ' ' * 4 * level
+                        print(f"{indent}{os.path.basename(root)}/")
+                        subindent = ' ' * 4 * (level + 1)
+                        for f in files:
+                            print(f"{subindent}{f}")
                     
                     # 递归查找所有文件
+                    found_files = False
                     for root, dirs, files in os.walk(chunk_dir):
                         for file_name in files:
                             if file_name.startswith('chunk_'):
+                                found_files = True
                                 file_path = os.path.join(root, file_name)
-                                print(f"Loading MF file: {file_path}")
+                                print(f"\nTrying to load MF file: {file_path}")
                                 try:
                                     chunk_data = np.load(file_path)
-                                    print(f"MF file contents: {chunk_data.files}")
+                                    print(f"Successfully loaded file. Contents: {chunk_data.files}")
                                     mf_embeddings.update({k: chunk_data[k] for k in chunk_data.files})
                                     logger.info(f"Loaded MF chunk from {file_name}")
                                 except Exception as e:
                                     print(f"Error loading MF file {file_name}: {str(e)}")
+                    
+                    if not found_files:
+                        print("\nNo chunk files found in MF directory!")
+                        print("Available files:", os.listdir(chunk_dir))
                     
                     if not mf_embeddings and chunk_idx == 0:
                         raise Exception("No MF embeddings found")
