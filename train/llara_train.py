@@ -372,9 +372,21 @@ def main():
     X = emb_data['embeddings'][[i for i, _ in samples]]  # 使用 track IDs 作为索引
     y = np.array([j for _, j in samples])
     
-    # Convert to tensors and move to device
-    X_tensor = torch.FloatTensor(X).to(device)
-    Y_tensor = torch.LongTensor(y).to(device)  # 使用 LongTensor 因为这是分类任务
+    # 创建数据集和数据加载器
+    dataset = TensorDataset(
+        torch.FloatTensor(X),
+        torch.LongTensor(y)
+    )
+    
+    # 使用较小的批次大小
+    BATCH_SIZE = 1024
+    train_loader = DataLoader(
+        dataset,
+        batch_size=BATCH_SIZE,
+        shuffle=True,
+        num_workers=4,
+        pin_memory=True
+    )
     
     # Initialize model
     input_dim = X.shape[1]
@@ -398,20 +410,32 @@ def main():
             "learning_rate": LEARNING_RATE,
             "weight_decay": WEIGHT_DECAY,
             "epochs": epochs,
+            "batch_size": BATCH_SIZE,
             "num_samples": len(X)
         })
         
         model.train()
         for epoch in tqdm(range(epochs), desc="Training LLARA Model"):
-            optimizer.zero_grad()
-            output = model(X_tensor)
-            loss = criterion(output, Y_tensor)
-            loss.backward()
-            optimizer.step()
+            epoch_loss = 0
+            for batch_X, batch_y in train_loader:
+                # 移动批次数据到设备
+                batch_X = batch_X.to(device)
+                batch_y = batch_y.to(device)
+                
+                optimizer.zero_grad()
+                output = model(batch_X)
+                loss = criterion(output, batch_y)
+                loss.backward()
+                optimizer.step()
+                
+                epoch_loss += loss.item()
+            
+            # 计算平均损失
+            avg_loss = epoch_loss / len(train_loader)
             
             # Log metrics
-            mlflow.log_metric("loss", loss.item(), step=epoch)
-            logger.info(f"Epoch {epoch+1}: Loss = {loss.item():.4f}")
+            mlflow.log_metric("loss", avg_loss, step=epoch)
+            logger.info(f"Epoch {epoch+1}: Loss = {avg_loss:.4f}")
         
         # Save model
         with tempfile.TemporaryDirectory() as tmp_dir:
