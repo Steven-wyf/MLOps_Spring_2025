@@ -58,6 +58,64 @@ def get_latest_run_id(experiment_name: str) -> str:
         raise ValueError(f"No successful runs found for experiment {experiment_name}")
     return runs.iloc[0].run_id
 
+def load_track_mapping() -> Tuple[Dict[str, int], Dict[int, str]]:
+    """Load the track URI to integer mapping from BERT encoding."""
+    # Get the latest BERT run ID
+    bert_run_id = get_latest_run_id("bert-track-embeddings")
+    logger.info(f"Loading track mapping from BERT run {bert_run_id}")
+    
+    # Download and load mapping info
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        # Load mapping info
+        info_path = mlflow.artifacts.download_artifacts(
+            run_id=bert_run_id,
+            artifact_path="mappings/mapping_info.npz",
+            dst_path=tmp_dir
+        )
+        info_data = np.load(info_path)
+        total_tracks = int(info_data['total_tracks'])
+        num_chunks = int(info_data['num_chunks'])
+        chunk_size = int(info_data['chunk_size'])
+        
+        logger.info(f"Loading {total_tracks} tracks from {num_chunks} chunks")
+        
+        # Initialize mapping dictionaries
+        uri_to_idx = {}
+        idx_to_uri = {}
+        
+        # Load each chunk
+        for i in range(num_chunks):
+            logger.info(f"Loading chunk {i+1}/{num_chunks}...")
+            chunk_dir = mlflow.artifacts.download_artifacts(
+                run_id=bert_run_id,
+                artifact_path=f"mappings/chunk_{i}",
+                dst_path=tmp_dir
+            )
+            
+            # Find the .npz file in the chunk directory
+            chunk_files = [f for f in os.listdir(chunk_dir) if f.endswith('.npz')]
+            if not chunk_files:
+                raise FileNotFoundError(f"No .npz file found in chunk directory: {chunk_dir}")
+            
+            chunk_path = os.path.join(chunk_dir, chunk_files[0])
+            chunk_data = np.load(chunk_path)
+            
+            # Get chunk data
+            chunk_uris = chunk_data['track_uris']
+            chunk_ids = chunk_data['track_ids']
+            
+            # Update mapping dictionaries
+            for uri, idx in zip(chunk_uris, chunk_ids):
+                uri_str = str(uri)
+                idx_int = int(idx)
+                uri_to_idx[uri_str] = idx_int
+                idx_to_uri[idx_int] = uri_str
+            
+            logger.info(f"Loaded {len(chunk_uris)} tracks from chunk {i+1}")
+        
+        logger.info(f"Successfully loaded {len(uri_to_idx)} tracks")
+        return uri_to_idx, idx_to_uri
+
 def load_embeddings_from_mlflow() -> Dict[str, Any]:
     """Load the latest MLP projected embeddings from MLflow"""
     try:
@@ -105,13 +163,9 @@ def load_embeddings_from_mlflow() -> Dict[str, Any]:
             if embeddings is None:
                 raise Exception("No embeddings loaded!")
             
-            # Create track ID to index mapping
-            track_to_idx = {track_id: idx for idx, track_id in enumerate(track_ids)}
-            
             return {
                 'embeddings': embeddings,
-                'track_ids': track_ids,
-                'track_to_idx': track_to_idx
+                'track_ids': track_ids
             }
     
     except Exception as e:
@@ -119,26 +173,14 @@ def load_embeddings_from_mlflow() -> Dict[str, Any]:
         raise
 
 def load_playlist_data() -> pd.DataFrame:
-    """Load and process playlist data from MLflow"""
-    try:
-        # Get latest data processing run ID
-        data_run_id = get_latest_run_id("data-processing")
-        logger.info(f"Loading playlist data from run {data_run_id}")
-        
-        # Download playlist data
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            data_path = mlflow.artifacts.download_artifacts(
-                run_id=data_run_id,
-                artifact_path="processed/playlist_track_list.csv",
-                dst_path=tmp_dir
-            )
-            df = pd.read_csv(data_path).dropna()
-        
-        return df
+    """Load and process playlist data from local file"""
+    DATA_DIR = os.path.expanduser(os.environ.get("PLAYLIST_DATA_DIR", "~/processed_data"))
+    data_path = os.path.join(DATA_DIR, "playlist_track_pairs.csv")
     
-    except Exception as e:
-        logger.error(f"Error loading playlist data: {str(e)}")
-        raise
+    if not os.path.exists(data_path):
+        raise FileNotFoundError(f"Playlist data not found at: {data_path}")
+    
+    return pd.read_csv(data_path).dropna()
 
 def create_training_pairs(df: pd.DataFrame, track_to_idx: Dict[str, int]) -> List[Tuple[int, int]]:
     """Create training pairs from playlist data"""
@@ -304,16 +346,21 @@ def train_model(model, train_loader, val_loader, test_loader, device, num_classe
 def main():
     # Load data
     logger.info("Loading embeddings and playlist data...")
+    # 1. 加载 BERT 的 track mapping
+    uri_to_idx, idx_to_uri = load_track_mapping()
+    # 2. 加载 MLP 的 embeddings
     emb_data = load_embeddings_from_mlflow()
+    # 3. 加载播放列表数据
     df = load_playlist_data()
     
-    # Create training pairs
+    # Create training pairs using BERT's track mapping
     logger.info("Creating training pairs...")
-    samples = create_training_pairs(df, emb_data['track_to_idx'])
+    samples = create_training_pairs(df, uri_to_idx)
     
     # Prepare data
-    X = emb_data['embeddings'][[emb_data['track_to_idx'][i] for i, _ in samples]]
-    y = np.array([j for _, j in samples])
+    # 使用 BERT 的 track mapping 来获取 embeddings
+    X = emb_data['embeddings'][[uri_to_idx[i] for i, _ in samples]]
+    y = np.array([uri_to_idx[j] for _, j in samples])
     
     # Split data
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
@@ -330,7 +377,7 @@ def main():
     
     # Initialize model
     input_dim = X.shape[1]
-    num_classes = len(emb_data['track_to_idx'])
+    num_classes = len(uri_to_idx)  # 使用 BERT 的 track 数量
     model = LlaRAClassifier(input_dim, num_classes, HIDDEN_DIM, DROPOUT).to(DEVICE)
     
     # Train model
@@ -365,7 +412,8 @@ def main():
                 "hidden_dim": HIDDEN_DIM,
                 "dropout": DROPOUT,
                 "mlflow_run_id": run.info.run_id,
-                "track_to_idx": emb_data['track_to_idx']  # Save track mapping with model
+                "track_to_idx": uri_to_idx,  # 保存 BERT 的 track mapping
+                "idx_to_track": idx_to_uri   # 保存反向映射
             }, model_path)
             mlflow.log_artifact(model_path, "models")
             logger.info(f"Model saved to MinIO through MLflow run {run.info.run_id}")
