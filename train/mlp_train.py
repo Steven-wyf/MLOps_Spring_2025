@@ -61,7 +61,7 @@ def load_embeddings_from_mlflow() -> Tuple[Dict[str, np.ndarray], Dict[str, np.n
                         artifact_path="embeddings",
                         dst_path=tmp_dir
                     )
-                    
+                    print(f"chunk_dir: {chunk_dir}")
                     # 查找所有 .npz 文件
                     npz_files = [f for f in os.listdir(chunk_dir) if f.endswith('.npz')]
                     if not npz_files:
