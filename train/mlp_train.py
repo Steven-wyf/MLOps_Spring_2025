@@ -164,9 +164,26 @@ item_embeddings = mf_embeddings['item_embeddings']  # matrix [num_items, dim]
 logger.info(f"Item embeddings shape: {item_embeddings.shape}")
 logger.info(f"Item embeddings type: {item_embeddings.dtype}")
 
+# Print BERT embeddings info
+logger.info(f"Number of BERT embeddings: {len(bert_embeddings)}")
+logger.info(f"Sample BERT keys: {list(bert_embeddings.keys())[:5]}")
+
 # Align track IDs in both
-common_ids = list(set(bert_embeddings.keys()) & set(map(str, range(item_embeddings.shape[0]))))
+mf_ids = set(map(str, range(item_embeddings.shape[0])))
+bert_ids = set(bert_embeddings.keys())
+common_ids = list(mf_ids & bert_ids)
 common_ids = sorted(common_ids, key=int)  # ensure order
+
+# Print ID sets info
+logger.info(f"Number of MF IDs: {len(mf_ids)}")
+logger.info(f"Number of BERT IDs: {len(bert_ids)}")
+logger.info(f"Number of common IDs: {len(common_ids)}")
+logger.info(f"Sample MF IDs: {list(mf_ids)[:5]}")
+logger.info(f"Sample BERT IDs: {list(bert_ids)[:5]}")
+logger.info(f"Sample common IDs: {common_ids[:5] if common_ids else 'None'}")
+
+if not common_ids:
+    raise ValueError("No common IDs found between BERT and MF embeddings!")
 
 # Convert IDs to integers for indexing
 common_ids_int = np.array([int(tid) for tid in common_ids], dtype=np.int64)
