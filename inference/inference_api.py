@@ -82,8 +82,9 @@ async def predict(request: Request):
         with open(input_path, 'w') as f:
             json.dump(data, f)
         
+        processed_data_output_dir = "/mnt/object/processed_data"
         # Process data
-        processed_files = process_data(input_path)
+        process_data(input_path, processed_data_output_dir, quick=False)
         
         # Get latest model run
         latest_run = get_latest_model_run()
@@ -94,26 +95,41 @@ async def predict(request: Request):
         models = load_models(latest_run.info.run_id)
         
         # Run inference pipeline
-        # 1. BERT encoding
+        # -1 BERT encoding
+        # Define the path to the JSON file
+        json_path = processed_data_output_dir + "track_texts.json"
+
+        # Load the JSON file
+        with open(json_path, "r", encoding="utf-8") as f:
+            track_metadata = json.load(f)
+        print(f"Loaded {len(track_metadata)} tracks from {json_path}")
+
         # Tokenize input text
         inputs = tokenizer(processed_files[0], padding=True, truncation=True, max_length=128, return_tensors="pt")
         with torch.no_grad():
             bert_output = models['bert'](**inputs).last_hidden_state[:, 0, :].cpu().numpy()
-        
-        # 2. Matrix Factorization
+        print(f"Encoded {len(inputs['input_ids'])} tracks with BERT")
+
+        # -2. Matrix Factorization
         # Convert BERT output to user-item format
+        print(f"starting matrix factorization...")
         mf_input = torch.tensor(bert_output, dtype=torch.float32)
         mf_output = models['mf'].predict(mf_input)
+        print(f"Finish Predicting {len(mf_input)} tracks with Matrix Factorization")
         
-        # 3. MLP
+        # -3. MLP
         # Convert MF output to tensor
+        print(f"starting mlp...")
         mlp_input = torch.tensor(mf_output, dtype=torch.float32)
         mlp_output = models['mlp'](mlp_input)
+        print(f"Finish Predicting {len(mlp_input)} tracks with MLP")
         
-        # 4. LLARA
+        # -4. LLARA
         # Convert MLP output to tensor
+        print(f"starting llara...")
         llara_input = torch.tensor(mlp_output, dtype=torch.float32)
         final_output = models['llara'](llara_input)
+        print(f"Finish Predicting {len(llara_input)} tracks with LLARA")
         
         # Convert output to original format
         output_data = {
@@ -125,6 +141,7 @@ async def predict(request: Request):
         output_path = f"/mnt/object/inference/output_{request_id}.json"
         with open(output_path, 'w') as f:
             json.dump(output_data, f)
+        print(f"Saved output to {output_path}...")
         
         return JSONResponse(content=output_data)
         

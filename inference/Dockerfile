@@ -38,11 +38,11 @@ ENV MLFLOW_S3_ENDPOINT_URL=http://minio:9000
 ENV AWS_ACCESS_KEY_ID=admin
 ENV AWS_SECRET_ACCESS_KEY=hrwbqzUS85G253yKi43T
 
-# preload the model into the image
-RUN python -c "from transformers import DistilBertTokenizer; DistilBertTokenizer.from_pretrained('distilbert-base-uncased')"
-
 # Switch to non-root user
 USER mlops
 
 # Default command with host set to 0.0.0.0 to allow external access
 CMD ["uvicorn", "inference_api:app", "--host", "0.0.0.0", "--port", "8080", "--workers", "4"] 
+
+# preload the model into the image
+RUN python -c "from transformers import DistilBertTokenizer; DistilBertTokenizer.from_pretrained('distilbert-base-uncased')"
