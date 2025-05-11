@@ -3,8 +3,8 @@ version: '3.8'
 services:
   inference_api:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: inference/Dockerfile
     ports:
       - "8080:8080"
     volumes:

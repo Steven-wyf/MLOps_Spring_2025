@@ -12,7 +12,7 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 # Copy requirements file
-COPY requirements.txt .
+COPY inference/requirements.txt .
 
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
@@ -25,9 +25,9 @@ RUN chown -R mlops:mlops /app
 VOLUME ["/mnt/object"]
 
 # Copy all necessary files
-COPY inference_api.py .
+COPY inference/inference_api.py .
 COPY data_processing/data_preprocess.py ./data_processing/
-COPY templates ./templates/
+COPY inference/templates ./templates/
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
