@@ -61,9 +61,13 @@ def load_embeddings_from_mlflow() -> Tuple[Dict[str, np.ndarray], Dict[str, np.n
                         artifact_path="embeddings",
                         dst_path=tmp_dir
                     )
-                    print(f"chunk_dir: {chunk_dir}")
+                    print(f"BERT chunk_dir: {chunk_dir}")
+                    print(f"BERT directory contents: {os.listdir(chunk_dir)}")
+                    
                     # 查找所有 .npz 文件
                     npz_files = [f for f in os.listdir(chunk_dir) if f.endswith('.npz')]
+                    print(f"Found BERT npz files: {npz_files}")
+                    
                     if not npz_files:
                         if chunk_idx == 0:
                             raise Exception("No BERT embeddings found")
@@ -72,7 +76,9 @@ def load_embeddings_from_mlflow() -> Tuple[Dict[str, np.ndarray], Dict[str, np.n
                     # 加载每个 .npz 文件
                     for npz_file in npz_files:
                         npz_path = os.path.join(chunk_dir, npz_file)
+                        print(f"Loading BERT file: {npz_path}")
                         chunk_data = np.load(npz_path)
+                        print(f"BERT file contents: {chunk_data.files}")
                         bert_embeddings.update({k: chunk_data[k] for k in chunk_data.files})
                         logger.info(f"Loaded BERT chunk from {npz_file}")
                     
@@ -94,9 +100,13 @@ def load_embeddings_from_mlflow() -> Tuple[Dict[str, np.ndarray], Dict[str, np.n
                         artifact_path="embeddings",
                         dst_path=tmp_dir
                     )
+                    print(f"MF chunk_dir: {chunk_dir}")
+                    print(f"MF directory contents: {os.listdir(chunk_dir)}")
                     
                     # 查找所有 .npz 文件
                     npz_files = [f for f in os.listdir(chunk_dir) if f.endswith('.npz')]
+                    print(f"Found MF npz files: {npz_files}")
+                    
                     if not npz_files:
                         if chunk_idx == 0:
                             raise Exception("No MF embeddings found")
@@ -105,7 +115,9 @@ def load_embeddings_from_mlflow() -> Tuple[Dict[str, np.ndarray], Dict[str, np.n
                     # 加载每个 .npz 文件
                     for npz_file in npz_files:
                         npz_path = os.path.join(chunk_dir, npz_file)
+                        print(f"Loading MF file: {npz_path}")
                         chunk_data = np.load(npz_path)
+                        print(f"MF file contents: {chunk_data.files}")
                         mf_embeddings.update({k: chunk_data[k] for k in chunk_data.files})
                         logger.info(f"Loaded MF chunk from {npz_file}")
                     
@@ -116,6 +128,8 @@ def load_embeddings_from_mlflow() -> Tuple[Dict[str, np.ndarray], Dict[str, np.n
                         raise Exception(f"No MF embeddings found: {str(e)}")
                     break
         
+        print(f"Loaded BERT embeddings keys: {list(bert_embeddings.keys())}")
+        print(f"Loaded MF embeddings keys: {list(mf_embeddings.keys())}")
         return bert_embeddings, mf_embeddings
     
     except Exception as e:
