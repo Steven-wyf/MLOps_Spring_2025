@@ -1,5 +1,5 @@
-# Use PyTorch with ROCm support for AMD GPUs
-FROM pytorch/pytorch:2.0.1-rocm5.6-runtime
+# Use standard PyTorch image
+FROM pytorch/pytorch:2.0.1-cuda11.7-cudnn8-runtime
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
@@ -31,8 +31,6 @@ COPY data_processing/data_preprocess.py ./data_processing/
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app
-ENV HSA_OVERRIDE_GFX_VERSION=10.3.0
-ENV HIP_VISIBLE_DEVICES=0
 ENV MLFLOW_TRACKING_URI=http://mlflow:5000
 ENV MLFLOW_S3_ENDPOINT_URL=http://minio:9000
 ENV AWS_ACCESS_KEY_ID=admin
