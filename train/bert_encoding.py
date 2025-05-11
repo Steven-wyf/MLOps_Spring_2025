@@ -8,6 +8,7 @@ import json
 import tempfile
 from transformers import DistilBertTokenizer, DistilBertModel
 from tqdm import tqdm
+from pathlib import Path
 
 # ---- CONFIG SECTION ---- #
 MLFLOW_TRACKING_URI = os.environ.get("MLFLOW_TRACKING_URI", "http://129.114.25.37:8000/")
@@ -17,7 +18,7 @@ AWS_SECRET_ACCESS_KEY = os.environ.get("AWS_SECRET_ACCESS_KEY", "hrwbqzUS85G253y
 EXPERIMENT_NAME = "bert-track-embeddings"
 
 # Data paths
-DATA_DIR = os.environ.get("PLAYLIST_DATA_DIR", "~/processed_data")
+DATA_DIR = os.path.expanduser(os.environ.get("PLAYLIST_DATA_DIR", "~/processed_data"))
 TRACK_JSON_PATH = os.path.join(DATA_DIR, "track_texts.json")  # JSON file with track information
 
 # Model parameters
@@ -47,6 +48,10 @@ def save_embeddings_to_minio(embeddings_dict, run_id):
 
 def main():
     # Load track data
+    print(f"Loading track data from: {TRACK_JSON_PATH}")
+    if not os.path.exists(TRACK_JSON_PATH):
+        raise FileNotFoundError(f"Track data file not found at: {TRACK_JSON_PATH}")
+        
     with open(TRACK_JSON_PATH, 'r') as f:
         track_data = json.load(f)
     
