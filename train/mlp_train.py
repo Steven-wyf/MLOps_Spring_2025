@@ -62,18 +62,19 @@ def load_embeddings_from_mlflow() -> Tuple[Dict[str, np.ndarray], Dict[str, np.n
                         dst_path=tmp_dir
                     )
                     
-                    # 直接尝试加载所有文件
-                    for file_name in os.listdir(chunk_dir):
-                        if file_name.startswith('chunk_'):
-                            file_path = os.path.join(chunk_dir, file_name)
-                            print(f"Loading BERT file: {file_path}")
-                            try:
-                                chunk_data = np.load(file_path)
-                                print(f"BERT file contents: {chunk_data.files}")
-                                bert_embeddings.update({k: chunk_data[k] for k in chunk_data.files})
-                                logger.info(f"Loaded BERT chunk from {file_name}")
-                            except Exception as e:
-                                print(f"Error loading BERT file {file_name}: {str(e)}")
+                    # 递归查找所有文件
+                    for root, dirs, files in os.walk(chunk_dir):
+                        for file_name in files:
+                            if file_name.startswith('chunk_'):
+                                file_path = os.path.join(root, file_name)
+                                print(f"Loading BERT file: {file_path}")
+                                try:
+                                    chunk_data = np.load(file_path)
+                                    print(f"BERT file contents: {chunk_data.files}")
+                                    bert_embeddings.update({k: chunk_data[k] for k in chunk_data.files})
+                                    logger.info(f"Loaded BERT chunk from {file_name}")
+                                except Exception as e:
+                                    print(f"Error loading BERT file {file_name}: {str(e)}")
                     
                     if not bert_embeddings and chunk_idx == 0:
                         raise Exception("No BERT embeddings found")
@@ -96,18 +97,19 @@ def load_embeddings_from_mlflow() -> Tuple[Dict[str, np.ndarray], Dict[str, np.n
                         dst_path=tmp_dir
                     )
                     
-                    # 直接尝试加载所有文件
-                    for file_name in os.listdir(chunk_dir):
-                        if file_name.startswith('chunk_'):
-                            file_path = os.path.join(chunk_dir, file_name)
-                            print(f"Loading MF file: {file_path}")
-                            try:
-                                chunk_data = np.load(file_path)
-                                print(f"MF file contents: {chunk_data.files}")
-                                mf_embeddings.update({k: chunk_data[k] for k in chunk_data.files})
-                                logger.info(f"Loaded MF chunk from {file_name}")
-                            except Exception as e:
-                                print(f"Error loading MF file {file_name}: {str(e)}")
+                    # 递归查找所有文件
+                    for root, dirs, files in os.walk(chunk_dir):
+                        for file_name in files:
+                            if file_name.startswith('chunk_'):
+                                file_path = os.path.join(root, file_name)
+                                print(f"Loading MF file: {file_path}")
+                                try:
+                                    chunk_data = np.load(file_path)
+                                    print(f"MF file contents: {chunk_data.files}")
+                                    mf_embeddings.update({k: chunk_data[k] for k in chunk_data.files})
+                                    logger.info(f"Loaded MF chunk from {file_name}")
+                                except Exception as e:
+                                    print(f"Error loading MF file {file_name}: {str(e)}")
                     
                     if not mf_embeddings and chunk_idx == 0:
                         raise Exception("No MF embeddings found")
@@ -117,6 +119,7 @@ def load_embeddings_from_mlflow() -> Tuple[Dict[str, np.ndarray], Dict[str, np.n
                     if chunk_idx == 0:
                         raise Exception(f"No MF embeddings found: {str(e)}")
                     break
+        
         return bert_embeddings, mf_embeddings
     
     except Exception as e:
