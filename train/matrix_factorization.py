@@ -203,7 +203,7 @@ def main():
     num_items = len(uri_to_idx)  # Use BERT's number of items
     embedding_dim = 32
     learning_rate = 0.001
-    epochs = 10
+    epochs = 5
     batch_size = 256
     
     # Initialize model and optimizer
