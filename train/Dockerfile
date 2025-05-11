@@ -1,5 +1,5 @@
-# Use PyTorch with ROCm support for AMD GPUs
-FROM pytorch/pytorch:2.0.1-rocm5.6-runtime
+# Use standard PyTorch image
+FROM pytorch/pytorch:2.0.1-cuda11.7-cudnn8-runtime
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
@@ -21,24 +21,24 @@ RUN pip install --no-cache-dir -r requirements.txt
 RUN useradd -m -s /bin/bash mlops
 RUN chown -R mlops:mlops /app
 
-# Set volume mount points (read-only)
+# Set volume mount points
 VOLUME ["/mnt/object"]
 
 # Copy training scripts
 COPY train/*.py ./
+COPY data_processing/data_preprocess.py ./data_processing/
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app
-ENV HSA_OVERRIDE_GFX_VERSION=10.3.0
-ENV HIP_VISIBLE_DEVICES=0
 ENV MLFLOW_TRACKING_URI=http://mlflow:5000
-ENV MLFLOW_S3_ENDPOINT_URL=http://minio:9000
+ENV MLFLOW_S3_ENDPOINT_URL=http://129.114.25.37:9000
 ENV AWS_ACCESS_KEY_ID=admin
 ENV AWS_SECRET_ACCESS_KEY=hrwbqzUS85G253yKi43T
+ENV AWS_DEFAULT_REGION=us-east-1
 
 # Switch to non-root user
 USER mlops
 
 # Default command
-CMD ["python"] 
+CMD ["python", "bert_encoding.py"] 
