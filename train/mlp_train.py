@@ -153,15 +153,17 @@ def main():
     # 直接使用 track_ids，因为它们已经是 BERT 的索引
     y = emb_data['track_ids']
     
-    # Convert to tensors
-    X_tensor = torch.FloatTensor(X)
-    Y_tensor = torch.FloatTensor(y).unsqueeze(1)  # 添加一个维度，使其形状为 [batch_size, 1]
+    # 设置设备
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Using device: {device}")
+    
+    # Convert to tensors and move to device
+    X_tensor = torch.FloatTensor(X).to(device)
+    Y_tensor = torch.FloatTensor(y).unsqueeze(1).to(device)  # 添加一个维度，使其形状为 [batch_size, 1]
     
     # Initialize model
     input_dim = X.shape[1]
     model = MLPProjector(input_dim)
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"Using device: {device}")
     model.to(device)
     
     # Training loop
@@ -208,6 +210,7 @@ def main():
             logger.info("Generating and saving projected embeddings...")
             model.eval()
             with torch.no_grad():
+                # 确保在 CPU 上保存
                 projected_embeddings = model(X_tensor).cpu().numpy()
                 
                 # Save in chunks
