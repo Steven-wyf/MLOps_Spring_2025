@@ -116,10 +116,9 @@ def load_embeddings_from_mlflow() -> Dict[str, Any]:
             # Load embeddings
             data = np.load(embeddings_path)
             embeddings = data['item_embeddings']
-            track_uris = data['track_uris']
-            track_ids = data['track_ids']
+            track_ids = data['track_ids']  # 这些是 BERT 的索引
             
-            logger.info(f"Successfully loaded {len(track_uris)} embeddings")
+            logger.info(f"Successfully loaded {len(track_ids)} embeddings")
             
             return {
                 'embeddings': embeddings,
@@ -139,7 +138,8 @@ def main():
     
     # Create training data
     X = emb_data['embeddings']
-    y = np.array([uri_to_idx[track_id] for track_id in emb_data['track_ids']])
+    # 直接使用 track_ids，因为它们已经是 BERT 的索引
+    y = emb_data['track_ids']
     
     # Convert to tensors
     X_tensor = torch.FloatTensor(X)
