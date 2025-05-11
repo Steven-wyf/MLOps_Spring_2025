@@ -44,6 +44,7 @@ services:
       - "8005:8002"   # Triton Metrics
     volumes:
       - ./models/music_rec:/models/music_rec
+      - ./evaluation:/evaluation:ro
     networks:
       - mlops-network
 
