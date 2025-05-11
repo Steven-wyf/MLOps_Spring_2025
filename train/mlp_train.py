@@ -55,18 +55,32 @@ def load_embeddings_from_mlflow() -> Tuple[Dict[str, np.ndarray], Dict[str, np.n
             chunk_idx = 0
             while True:
                 try:
-                    chunk_path = mlflow.artifacts.download_artifacts(
+                    # 下载整个 embeddings 目录
+                    chunk_dir = mlflow.artifacts.download_artifacts(
                         run_id=bert_run_id,
-                        artifact_path=f"embeddings/chunk_{chunk_idx}",
+                        artifact_path="embeddings",
                         dst_path=tmp_dir
                     )
-                    chunk_data = np.load(chunk_path)
-                    bert_embeddings.update({k: chunk_data[k] for k in chunk_data.files})
-                    chunk_idx += 1
-                    logger.info(f"Loaded BERT chunk {chunk_idx}")
+                    
+                    # 查找所有 .npz 文件
+                    npz_files = [f for f in os.listdir(chunk_dir) if f.endswith('.npz')]
+                    if not npz_files:
+                        if chunk_idx == 0:
+                            raise Exception("No BERT embeddings found")
+                        break
+                    
+                    # 加载每个 .npz 文件
+                    for npz_file in npz_files:
+                        npz_path = os.path.join(chunk_dir, npz_file)
+                        chunk_data = np.load(npz_path)
+                        bert_embeddings.update({k: chunk_data[k] for k in chunk_data.files})
+                        logger.info(f"Loaded BERT chunk from {npz_file}")
+                    
+                    break  # 所有文件都已加载
+                    
                 except Exception as e:
                     if chunk_idx == 0:
-                        raise Exception("No BERT embeddings found")
+                        raise Exception(f"No BERT embeddings found: {str(e)}")
                     break
             
             # Download MF embeddings (now in chunks)
@@ -74,18 +88,32 @@ def load_embeddings_from_mlflow() -> Tuple[Dict[str, np.ndarray], Dict[str, np.n
             chunk_idx = 0
             while True:
                 try:
-                    chunk_path = mlflow.artifacts.download_artifacts(
+                    # 下载整个 embeddings 目录
+                    chunk_dir = mlflow.artifacts.download_artifacts(
                         run_id=mf_run_id,
-                        artifact_path=f"embeddings/chunk_{chunk_idx}",
+                        artifact_path="embeddings",
                         dst_path=tmp_dir
                     )
-                    chunk_data = np.load(chunk_path)
-                    mf_embeddings.update({k: chunk_data[k] for k in chunk_data.files})
-                    chunk_idx += 1
-                    logger.info(f"Loaded MF chunk {chunk_idx}")
+                    
+                    # 查找所有 .npz 文件
+                    npz_files = [f for f in os.listdir(chunk_dir) if f.endswith('.npz')]
+                    if not npz_files:
+                        if chunk_idx == 0:
+                            raise Exception("No MF embeddings found")
+                        break
+                    
+                    # 加载每个 .npz 文件
+                    for npz_file in npz_files:
+                        npz_path = os.path.join(chunk_dir, npz_file)
+                        chunk_data = np.load(npz_path)
+                        mf_embeddings.update({k: chunk_data[k] for k in chunk_data.files})
+                        logger.info(f"Loaded MF chunk from {npz_file}")
+                    
+                    break  # 所有文件都已加载
+                    
                 except Exception as e:
                     if chunk_idx == 0:
-                        raise Exception("No MF embeddings found")
+                        raise Exception(f"No MF embeddings found: {str(e)}")
                     break
         
         return bert_embeddings, mf_embeddings
