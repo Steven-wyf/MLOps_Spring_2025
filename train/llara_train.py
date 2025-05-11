@@ -38,7 +38,7 @@ EPOCHS = 50
 BATCH_SIZE = 128
 EVAL_TOP_K = [5, 10, 20]
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
+print(f"Using device: {DEVICE}")
 # Configure MLflow
 os.environ["MLFLOW_S3_ENDPOINT_URL"] = MLFLOW_S3_ENDPOINT_URL
 os.environ["AWS_ACCESS_KEY_ID"] = AWS_ACCESS_KEY_ID

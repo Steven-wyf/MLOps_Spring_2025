@@ -121,6 +121,7 @@ with mlflow.start_run() as run:
     output_dim = Y_tensor.shape[1]
     model = MLPProjector(input_dim, output_dim)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Using device: {device}")
     model.to(device)
 
     X_tensor = X_tensor.to(device)
