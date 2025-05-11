@@ -18,7 +18,7 @@ sudo chown -R cc /mnt/object
 sudo chgrp -R cc /mnt/object
 
 # Mount the remote storage
-rclone mount chi_tacc:mlops_project_persistant /mnt/object --read-only --allow-other --daemon
+rclone mount chi_tacc:mlops_project9_persistant /mnt/object --read-only --allow-other --daemon
 
 # Test MinIO connection
 echo "Testing MinIO connection..."

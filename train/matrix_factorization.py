@@ -73,7 +73,7 @@ class MatrixFactorization(nn.Module):
         return torch.sum(user_emb * item_emb, dim=1)
 
 # Load and preprocess data
-df = pd.read_csv('/mnt/object/processed_data/playlist_track_pairs.csv')
+df = pd.read_csv('~/processed_data/playlist_track_pairs.csv')
 user_encoder = LabelEncoder()
 item_encoder = LabelEncoder()
 
