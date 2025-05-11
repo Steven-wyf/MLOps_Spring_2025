@@ -41,41 +41,60 @@ os.environ["AWS_SECRET_ACCESS_KEY"] = AWS_SECRET_ACCESS_KEY
 mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
 mlflow.set_experiment(EXPERIMENT_NAME)
 
-def encode_tracks(tracks):
-    """Encode track URIs to integers using LabelEncoder."""
-    le = LabelEncoder()
-    track_ids = le.fit_transform(tracks)
+def save_mapping_to_minio(track_uris, track_ids, run_id):
+    """Save track URI mapping to MinIO in chunks."""
+    print("Starting to save track URI mapping...")
     
-    # Save the label encoder mapping
+    # 将映射分成较小的块
+    chunk_size = 10000  # 每个文件保存10000个映射
+    total_tracks = len(track_uris)
+    num_chunks = (total_tracks + chunk_size - 1) // chunk_size
+    
+    print(f"Saving {num_chunks} chunks of track URI mapping...")
+    
     with tempfile.TemporaryDirectory() as tmp_dir:
-        mapping_path = os.path.join(tmp_dir, "track_uri_mapping.npz")
+        for i in range(num_chunks):
+            start_idx = i * chunk_size
+            end_idx = min((i + 1) * chunk_size, total_tracks)
+            
+            # 获取当前块的映射
+            chunk_uris = track_uris[start_idx:end_idx]
+            chunk_ids = track_ids[start_idx:end_idx]
+            
+            print(f"Saving chunk {i+1}/{num_chunks}...")
+            # 保存每个块到临时文件
+            temp_npz = os.path.join(tmp_dir, f"track_uri_mapping_chunk_{i}.npz")
+            np.savez(
+                temp_npz,
+                track_uris=chunk_uris,
+                track_ids=chunk_ids,
+                chunk_index=i,
+                total_chunks=num_chunks
+            )
+            print(f"Saved chunk to {temp_npz}")
+            
+            # 上传到 MinIO
+            print(f"Uploading chunk {i+1} to MinIO...")
+            try:
+                mlflow.log_artifact(temp_npz, f"mappings/chunk_{i}")
+                print(f"Successfully uploaded chunk {i+1}")
+            except Exception as e:
+                print(f"Error uploading chunk {i+1}: {str(e)}")
+                # 如果上传失败，保存到本地
+                backup_path = f"track_uri_mapping_chunk_{i}_backup.npz"
+                np.savez(backup_path, track_uris=chunk_uris, track_ids=chunk_ids)
+                print(f"Saved backup to {backup_path}")
+        
+        # 保存映射信息
+        info_path = os.path.join(tmp_dir, "mapping_info.npz")
         np.savez(
-            mapping_path,
-            track_uris=le.classes_,
-            track_ids=np.arange(len(le.classes_))
+            info_path,
+            total_tracks=total_tracks,
+            num_chunks=num_chunks,
+            chunk_size=chunk_size
         )
-        mlflow.log_artifact(mapping_path, "mappings")
-        logger.info(f"Saved track URI mapping with {len(le.classes_)} tracks")
-    
-    return track_ids, le
-
-def process_tracks(tracks, embeddings):
-    """Process tracks and save embeddings with encoded IDs."""
-    # Encode track URIs
-    track_ids, le = encode_tracks(tracks)
-    
-    # Save embeddings with encoded IDs
-    with tempfile.TemporaryDirectory() as tmp_dir:
-        embeddings_path = os.path.join(tmp_dir, "track_embeddings.npz")
-        np.savez(
-            embeddings_path,
-            embeddings=embeddings,
-            track_ids=track_ids
-        )
-        mlflow.log_artifact(embeddings_path, "embeddings")
-        logger.info(f"Saved embeddings for {len(track_ids)} tracks")
-    
-    return embeddings, track_ids
+        mlflow.log_artifact(info_path, "mappings")
+        print(f"Saved mapping info with {total_tracks} tracks in {num_chunks} chunks")
 
 def save_embeddings_to_minio(embeddings_dict, run_id):
     """Save embeddings to MinIO using MLflow"""
@@ -138,16 +157,8 @@ def main():
         le = LabelEncoder()
         track_indices = le.fit_transform(track_ids)
         
-        # Save mapping
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            mapping_path = os.path.join(tmp_dir, "track_uri_mapping.npz")
-            np.savez(
-                mapping_path,
-                track_uris=le.classes_,
-                track_ids=np.arange(len(le.classes_))
-            )
-            mlflow.log_artifact(mapping_path, "mappings")
-            print(f"Saved track URI mapping with {len(le.classes_)} tracks")
+        # Save mapping in chunks
+        save_mapping_to_minio(le.classes_, np.arange(len(le.classes_)), run.info.run_id)
         
         for i in tqdm(range(0, len(track_ids), batch_size)):
             batch_ids = track_ids[i:i + batch_size]

@@ -109,22 +109,49 @@ def load_track_mapping() -> Tuple[Dict[str, int], Dict[int, str]]:
     # Get the latest BERT run
     bert_run_id = get_latest_run_id("bert-track-embeddings")
     
-    # Download the mapping
+    # Download and load mapping info
     with tempfile.TemporaryDirectory() as tmp_dir:
-        mapping_path = mlflow.artifacts.download_artifacts(
+        # Load mapping info
+        info_path = mlflow.artifacts.download_artifacts(
             run_id=bert_run_id,
-            artifact_path="mappings/track_uri_mapping.npz",  # 确保与 BERT 保存的路径一致
+            artifact_path="mappings/mapping_info.npz",
             dst_path=tmp_dir
         )
-        mapping_data = np.load(mapping_path)
-        track_uris = mapping_data['track_uris']
-        track_ids = mapping_data['track_ids']
+        info_data = np.load(info_path)
+        total_tracks = int(info_data['total_tracks'])
+        num_chunks = int(info_data['num_chunks'])
+        chunk_size = int(info_data['chunk_size'])
         
-        # Create mapping dictionaries
-        uri_to_idx = {str(uri): int(idx) for uri, idx in zip(track_uris, track_ids)}
-        idx_to_uri = {int(idx): str(uri) for uri, idx in zip(track_uris, track_ids)}
+        logger.info(f"Loading {total_tracks} tracks from {num_chunks} chunks")
         
-        logger.info(f"Loaded track mapping with {len(uri_to_idx)} tracks")
+        # Initialize mapping dictionaries
+        uri_to_idx = {}
+        idx_to_uri = {}
+        
+        # Load each chunk
+        for i in range(num_chunks):
+            logger.info(f"Loading chunk {i+1}/{num_chunks}...")
+            chunk_path = mlflow.artifacts.download_artifacts(
+                run_id=bert_run_id,
+                artifact_path=f"mappings/chunk_{i}",
+                dst_path=tmp_dir
+            )
+            chunk_data = np.load(chunk_path)
+            
+            # Get chunk data
+            chunk_uris = chunk_data['track_uris']
+            chunk_ids = chunk_data['track_ids']
+            
+            # Update mapping dictionaries
+            for uri, idx in zip(chunk_uris, chunk_ids):
+                uri_str = str(uri)
+                idx_int = int(idx)
+                uri_to_idx[uri_str] = idx_int
+                idx_to_uri[idx_int] = uri_str
+            
+            logger.info(f"Loaded {len(chunk_uris)} tracks from chunk {i+1}")
+        
+        logger.info(f"Successfully loaded {len(uri_to_idx)} tracks")
         logger.info(f"Sample track URIs: {list(uri_to_idx.keys())[:3]}")
         logger.info(f"Sample track IDs: {list(uri_to_idx.values())[:3]}")
         
