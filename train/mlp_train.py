@@ -75,6 +75,7 @@ def load_embeddings_from_mlflow() -> Tuple[Dict[str, np.ndarray], Dict[str, np.n
                                         file_path = os.path.join(chunk_path, file_name)
                                         try:
                                             chunk_data = np.load(file_path)
+                                            logger.info(f"BERT chunk {file_name} contains keys: {chunk_data.files}")
                                             bert_embeddings.update({k: chunk_data[k] for k in chunk_data.files})
                                             logger.info(f"Loaded BERT chunk from {file_name}")
                                         except Exception as e:
@@ -117,6 +118,7 @@ def load_embeddings_from_mlflow() -> Tuple[Dict[str, np.ndarray], Dict[str, np.n
                                         file_path = os.path.join(chunk_path, file_name)
                                         try:
                                             chunk_data = np.load(file_path)
+                                            logger.info(f"MF chunk {file_name} contains keys: {chunk_data.files}")
                                             mf_embeddings.update({k: chunk_data[k] for k in chunk_data.files})
                                             logger.info(f"Loaded MF chunk from {file_name}")
                                         except Exception as e:
@@ -143,6 +145,10 @@ def load_embeddings_from_mlflow() -> Tuple[Dict[str, np.ndarray], Dict[str, np.n
 # === Load input data ===
 logger.info("Loading embeddings from MLflow...")
 bert_embeddings, mf_embeddings = load_embeddings_from_mlflow()
+
+# Print available keys for debugging
+logger.info(f"Available keys in MF embeddings: {list(mf_embeddings.keys())}")
+logger.info(f"MF embeddings content: {mf_embeddings}")
 
 # Load track embeddings
 item_embeddings = mf_embeddings['item_embeddings']  # matrix [num_items, dim]
