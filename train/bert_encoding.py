@@ -149,6 +149,7 @@ def main():
     embeddings = {}
     batch_size = BATCH_SIZE
     track_ids = list(track_data.keys())
+    total_batches = (len(track_ids) + batch_size - 1) // batch_size
     
     print("Starting MLflow run...")
     with mlflow.start_run() as run:
@@ -160,7 +161,7 @@ def main():
         # Save mapping in chunks
         save_mapping_to_minio(le.classes_, np.arange(len(le.classes_)), run.info.run_id)
         
-        for i in tqdm(range(0, len(track_ids), batch_size)):
+        for i in range(0, len(track_ids), batch_size):
             batch_ids = track_ids[i:i + batch_size]
             batch_texts = [track_data[tid] for tid in batch_ids]
             
@@ -176,8 +177,9 @@ def main():
             # Store embeddings
             for tid, emb in zip(batch_ids, batch_embeddings):
                 embeddings[tid] = emb
+
         
-        print("Processing complete. Starting to save embeddings...")
+        print("\nProcessing complete. Starting to save embeddings...")
         # Save embeddings to MinIO
         save_embeddings_to_minio(embeddings, run.info.run_id)
         
