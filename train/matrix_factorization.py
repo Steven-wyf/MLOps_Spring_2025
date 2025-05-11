@@ -131,11 +131,18 @@ def load_track_mapping() -> Tuple[Dict[str, int], Dict[int, str]]:
         # Load each chunk
         for i in range(num_chunks):
             logger.info(f"Loading chunk {i+1}/{num_chunks}...")
-            chunk_path = mlflow.artifacts.download_artifacts(
+            chunk_dir = mlflow.artifacts.download_artifacts(
                 run_id=bert_run_id,
                 artifact_path=f"mappings/chunk_{i}",
                 dst_path=tmp_dir
             )
+            
+            # Find the .npz file in the chunk directory
+            chunk_files = [f for f in os.listdir(chunk_dir) if f.endswith('.npz')]
+            if not chunk_files:
+                raise FileNotFoundError(f"No .npz file found in chunk directory: {chunk_dir}")
+            
+            chunk_path = os.path.join(chunk_dir, chunk_files[0])
             chunk_data = np.load(chunk_path)
             
             # Get chunk data
