@@ -98,17 +98,17 @@ def load_track_mapping() -> Tuple[Dict[str, int], Dict[int, str]]:
         return uri_to_idx, idx_to_uri
 
 def load_embeddings_from_mlflow() -> Dict[str, Any]:
-    """Load the latest MLP projected embeddings from MLflow"""
+    """Load embeddings from Matrix Factorization model"""
     try:
-        # Get latest MLP run ID
-        mlp_run_id = get_latest_run_id("mlp-projector")
-        logger.info(f"Loading embeddings from MLP run {mlp_run_id}")
+        # Get latest Matrix Factorization run ID
+        mf_run_id = get_latest_run_id("matrix-factorization")
+        logger.info(f"Loading embeddings from Matrix Factorization run {mf_run_id}")
         
         # Download embeddings
         with tempfile.TemporaryDirectory() as tmp_dir:
-            # Download projected embeddings
+            # Download embeddings
             chunk_dir = mlflow.artifacts.download_artifacts(
-                run_id=mlp_run_id,
+                run_id=mf_run_id,
                 artifact_path="embeddings",
                 dst_path=tmp_dir
             )
@@ -130,10 +130,10 @@ def load_embeddings_from_mlflow() -> Dict[str, Any]:
                                 try:
                                     chunk_data = np.load(file_path, allow_pickle=True)
                                     if embeddings is None:
-                                        embeddings = chunk_data['embeddings']
+                                        embeddings = chunk_data['item_embeddings']  # 注意这里改为 item_embeddings
                                         track_ids = chunk_data['track_ids']
                                     else:
-                                        embeddings = np.concatenate([embeddings, chunk_data['embeddings']])
+                                        embeddings = np.concatenate([embeddings, chunk_data['item_embeddings']])
                                         track_ids = np.concatenate([track_ids, chunk_data['track_ids']])
                                 except Exception as e:
                                     logger.error(f"Error loading file {file_name}: {str(e)}")
@@ -157,7 +157,7 @@ def main():
     # Load track mapping from BERT
     uri_to_idx, idx_to_uri = load_track_mapping()
     
-    # Load embeddings from MLP
+    # Load embeddings from Matrix Factorization
     emb_data = load_embeddings_from_mlflow()
     
     # Create training data
@@ -217,6 +217,30 @@ def main():
             }, model_path)
             mlflow.log_artifact(model_path, "models")
             logger.info(f"Model saved to MinIO through MLflow run {run.info.run_id}")
+            
+            # Save projected embeddings
+            logger.info("Generating and saving projected embeddings...")
+            model.eval()
+            with torch.no_grad():
+                projected_embeddings = model(X_tensor).cpu().numpy()
+                
+                # Save in chunks
+                chunk_size = 10000
+                num_chunks = (len(projected_embeddings) + chunk_size - 1) // chunk_size
+                
+                for i in range(num_chunks):
+                    start_idx = i * chunk_size
+                    end_idx = min((i + 1) * chunk_size, len(projected_embeddings))
+                    
+                    chunk_path = os.path.join(tmp_dir, f"chunk_{i}.npz")
+                    np.savez(
+                        chunk_path,
+                        embeddings=projected_embeddings[start_idx:end_idx],
+                        track_ids=emb_data['track_ids'][start_idx:end_idx]
+                    )
+                    mlflow.log_artifact(chunk_path, f"embeddings/chunk_{i}")
+                
+                logger.info(f"Projected embeddings saved in {num_chunks} chunks")
 
 if __name__ == "__main__":
     main()
