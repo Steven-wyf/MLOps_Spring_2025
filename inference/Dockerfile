@@ -26,6 +26,7 @@ VOLUME ["/mnt/object"]
 
 # Copy all necessary files
 COPY inference/inference_api.py .
+COPY inference/static ./static
 COPY data_processing/data_preprocess.py ./data_processing/
 COPY inference/templates ./templates/
 
@@ -36,6 +37,9 @@ ENV MLFLOW_TRACKING_URI=http://mlflow:5000
 ENV MLFLOW_S3_ENDPOINT_URL=http://minio:9000
 ENV AWS_ACCESS_KEY_ID=admin
 ENV AWS_SECRET_ACCESS_KEY=hrwbqzUS85G253yKi43T
+
+# preload the model into the image
+RUN python -c "from transformers import DistilBertTokenizer; DistilBertTokenizer.from_pretrained('distilbert-base-uncased')"
 
 # Switch to non-root user
 USER mlops
