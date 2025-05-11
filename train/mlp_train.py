@@ -39,6 +39,21 @@ def get_latest_run_id(experiment_name: str) -> str:
         raise ValueError(f"No successful runs found for experiment {experiment_name}")
     return runs.iloc[0].run_id
 
+def inspect_npz_file(file_path: str) -> None:
+    """Inspect the contents of an npz file."""
+    try:
+        data = np.load(file_path, allow_pickle=True)
+        logger.info(f"\nNPZ file: {file_path}")
+        logger.info(f"Available arrays: {data.files}")
+        for key in data.files:
+            array = data[key]
+            logger.info(f"\nArray '{key}':")
+            logger.info(f"Shape: {array.shape}")
+            logger.info(f"Type: {array.dtype}")
+            logger.info(f"First few elements: {array[:2] if len(array.shape) > 0 else array}")
+    except Exception as e:
+        logger.error(f"Error inspecting npz file: {str(e)}")
+
 def load_embeddings_from_mlflow() -> Tuple[Dict[str, np.ndarray], Dict[str, np.ndarray]]:
     """Load BERT and MF embeddings from MLflow."""
     try:
@@ -74,7 +89,7 @@ def load_embeddings_from_mlflow() -> Tuple[Dict[str, np.ndarray], Dict[str, np.n
                                         found_files = True
                                         file_path = os.path.join(chunk_path, file_name)
                                         try:
-                                            chunk_data = np.load(file_path)
+                                            chunk_data = np.load(file_path, allow_pickle=True)
                                             bert_embeddings.update({k: chunk_data[k] for k in chunk_data.files})
                                         except Exception as e:
                                             logger.error(f"Error loading BERT file {file_name}: {str(e)}")
@@ -115,7 +130,7 @@ def load_embeddings_from_mlflow() -> Tuple[Dict[str, np.ndarray], Dict[str, np.n
                                         found_files = True
                                         file_path = os.path.join(chunk_path, file_name)
                                         try:
-                                            chunk_data = np.load(file_path)
+                                            chunk_data = np.load(file_path, allow_pickle=True)
                                             mf_embeddings.update({k: chunk_data[k] for k in chunk_data.files})
                                         except Exception as e:
                                             logger.error(f"Error loading MF file {file_name}: {str(e)}")
@@ -141,9 +156,6 @@ def load_embeddings_from_mlflow() -> Tuple[Dict[str, np.ndarray], Dict[str, np.n
 # === Load input data ===
 logger.info("Loading embeddings from MLflow...")
 bert_embeddings, mf_embeddings = load_embeddings_from_mlflow()
-
-# Print available keys for debugging
-logger.info(f"Available keys in MF embeddings: {list(mf_embeddings.keys())}")
 
 # Load track embeddings
 item_embeddings = mf_embeddings['item_embeddings']  # matrix [num_items, dim]
