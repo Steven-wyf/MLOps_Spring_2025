@@ -107,17 +107,14 @@ The [project proposal](./ProjectProposal.md) is localed at the repo base directo
 * Input: `{ "tracks": [ {"track_name": ..., "artist_name": ... }, ... ] }`
 * Output: `{ "recommended_tracks": [...] }`
 
-***
+Future Optimization
 * Quantized to ONNX QInt8 (see `evaluation/templates`)
 * Offline evaluation: [`evaluation`](./evaluation) folder
-* Load test results: logged via MLflow
-***
 
-##  Evaluation and Monitoring (Siqi Xu)
 
-* Offline metrics: Accuracy of Llara, 
+* Offline metrics: Accuracy of Llara, this data would be relative low due to cross examination so we bring in a frontend button to collect user feedback. The user can click if they like or dislike the suggestion. If they dislike the track suggested, the data will be stored as negative data for matrix factorization so we can use the data to re-train the model.
 * Online logging: API response latency, failure rates (FastAPI middleware)
-* Business-specific evaluation: genre diversity vs. retention rate (🎯)
+
 
 ##  CI/CD and Continuous Training (Unit 2/3 - Steven Wang)
 
@@ -128,13 +125,14 @@ The [project proposal](./ProjectProposal.md) is localed at the repo base directo
   * Train → Staging → Canary → Production (ArgoCD apps)
   * Use MLflow metrics to auto-promote
 
-##  Online Inference + Feedback Loop (🎯) Data or Evaluation person? 
+##  Online Inference Data
 
-* `/predict` endpoint accepts user playlist input
-* Feedback (clicks, skips) logged for monitoring
-* Future loop: feedback → retraining pipeline
+* The new data will be sent to the inference endpoint setup by FASTAPI and the inference node would pick up the file and re-format the data and put the data through MLP prjector and then LLaRA
 
----
+## Online Evaluation
+
+## CI/CD and continuous training
+You can promote the model on ArgoCD Worflow, all GitOps update will be synced to ArgoCD. If a re-train is required, the training docker can be setup using the `docker-compose` file in folder `/train`. 
 
 ##  Folder Map
 
