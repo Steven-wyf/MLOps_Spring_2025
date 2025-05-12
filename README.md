@@ -156,7 +156,7 @@ Future Optimization
 
 * The new data will be sent to the inference endpoint setup by FASTAPI and the inference node would pick up the file and re-format the data and put the data through MLP prjector and then LLaRA.
 
-## Online Evaluation
+## Online Evaluation(Unit 6/7 - Siqi Xu)
 After staging validation, we conducted online evaluation in a canary environment to simulate real user behavior and monitor live model performance.
 
 * Setup Summary:
