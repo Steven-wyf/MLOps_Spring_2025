@@ -110,10 +110,10 @@ The processed training data is very large, so it located at `mnt/object/processe
 * Output: `{ "recommended_tracks": [...] }`
 
 ### Inference Pipeline (Steven Wang's Contributions):
-* Designed and implemented FastAPI-based model serving architecture to handle real-time inference requests efficiently.
+* Designed and implemented [FastAPI-based model](./inference/inference_api.py) serving architecture to handle real-time inference requests efficiently.
 * Integrated MLflow model registry for versioned model loading, ensuring that the correct model version is always deployed.
-* Implemented model pipeline orchestration (BERT → MF → MLP → LLARA) to streamline the inference process and improve response times.
-* Set up containerized inference service with Docker Compose for easy deployment and scalability.
+* Implemented [model pipeline](./inference/inference_api.py) orchestration (BERT → MF → MLP → LLARA) to streamline the inference process and improve response times.
+* Set up [containerized inference service](./inference/inference_api.py) with Docker Compose for easy deployment and scalability.
 * Added monitoring and logging capabilities using Prometheus and Grafana to track API performance, latency, and failure rates.
 
 Future Optimization
