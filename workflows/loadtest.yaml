@@ -1,0 +1,57 @@
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: loadtest
+spec:
+  entrypoint: loadtest-flow
+  arguments:
+    parameters:
+    - name: endpoint
+    - name: num-requests
+      value: "100"
+    - name: concurrency
+      value: "10"
+    - name: input-size
+      value: "256"
+
+  templates:
+  - name: loadtest-flow
+    steps:
+      - - name: run-loadtest
+          template: loadtest
+          arguments:
+            parameters:
+            - name: endpoint
+              value: "{{workflow.parameters.endpoint}}"
+            - name: num-requests
+              value: "{{workflow.parameters.num-requests}}"
+            - name: concurrency
+              value: "{{workflow.parameters.concurrency}}"
+            - name: input-size
+              value: "{{workflow.parameters.input-size}}"
+
+  - name: loadtest
+    inputs:
+      parameters:
+      - name: endpoint
+      - name: num-requests
+      - name: concurrency
+      - name: input-size
+    container:
+      image: python:3.11-slim
+      command: [sh, -c]
+      args:
+        - |
+          pip install requests > /dev/null
+          python /app/loadtest.py \
+            --endpoint {{inputs.parameters.endpoint}} \
+            --num-requests {{inputs.parameters.num-requests}} \
+            --concurrency {{inputs.parameters.concurrency}} \
+            --input-size {{inputs.parameters.input-size}}
+      volumeMounts:
+      - name: loadtest-code
+        mountPath: /app
+    volumes:
+    - name: loadtest-code
+      configMap:
+        name: loadtest-script

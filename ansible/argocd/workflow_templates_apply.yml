@@ -12,6 +12,8 @@
       - deploy-container-image.yaml
       - promote-model.yaml
       - train-model.yaml
+      - loadtest.yaml
+      - deploy-to-inference.yaml  # Add the new deploy-to-inference workflow
 
   tasks:
     - name: Clone or update mlops-iac repo

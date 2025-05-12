@@ -1,0 +1,80 @@
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: deploy-to-inference
+spec:
+  entrypoint: deploy-inference-flow
+  arguments:
+    parameters:
+    - name: model-version
+
+  templates:
+  - name: deploy-inference-flow
+    steps:
+      - - name: download-model
+          template: download-model
+          arguments:
+            parameters:
+            - name: model-version
+              value: "{{workflow.parameters.model-version}}"
+      - - name: copy-model-to-inference
+          template: copy-model
+      - - name: restart-inference-service
+          template: restart-inference
+
+  - name: download-model
+    inputs:
+      parameters:
+      - name: model-version
+    container:
+      image: python:3.11-slim
+      command: [sh, -c]
+      args:
+        - |
+          pip install mlflow-skinny
+          export MLFLOW_TRACKING_URI=http://mlflow.mlops-platform.svc.cluster.local:8000
+          mkdir -p /tmp/mlflow_model
+
+          echo "Downloading MLflow model artifacts..."
+          mlflow artifacts download \
+            --artifact-uri models:/GourmetGramFood11Model/{{inputs.parameters.model-version}} \
+            -d /tmp/mlflow_model || { echo "MLflow download failed"; exit 1; }
+
+          echo "Searching for model.pth..."
+          FOUND=$(find /tmp/mlflow_model/data -name model.pth | head -n 1)
+          if [ -z "$FOUND" ]; then
+            echo "ERROR: model.pth not found in MLflow artifacts"; exit 1
+          fi
+
+          echo "Copying model.pth to /mnt/inference/ as food11.pth..."
+          cp "$FOUND" /mnt/inference/food11.pth
+      volumeMounts:
+      - name: inference-dir
+        mountPath: /mnt/inference
+
+  - name: copy-model
+    container:
+      image: busybox
+      command: [sh, -c]
+      args:
+        - |
+          echo "Model copied to inference directory successfully."
+
+  - name: restart-inference
+    container:
+      image: bitnami/kubectl:latest
+      command: [sh, -c]
+      args:
+        - |
+          echo "Restarting inference service..."
+          kubectl rollout restart deployment inference-service -n inference
+          echo "Inference service restarted successfully."
+
+  volumeClaimTemplates:
+  - metadata:
+      name: inference-dir
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 1Gi
