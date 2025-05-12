@@ -101,7 +101,7 @@ The [project proposal](./ProjectProposal.md) is located at the repo base directo
 * Experiment tracking: [`mlflow`](http://129.114.25.37:8000)
 * Experiment artifacts: The model, embedding, mapping, and logs all store at [`minIO`](http://129.114.25.37:9000)
 
-##  Model Serving (Unit 6/7 - Siqi Xu)
+##  Model Serving and Evaluation(Unit 6/7 - Siqi Xu)
 * API in [`inference/inference_api.py`](./inference/inference_api.py)
 * Served with FastAPI + Docker Compose: [`docker-compose-inference.yml`](./inference/docker-compose-inference.yml)
 * Input: `{ "tracks": [ {"track_name": ..., "artist_name": ... }, ... ] }`
@@ -126,6 +126,12 @@ Future Optimization
   * [`gen_input.py`](./evaluation/gen_input.py)：Generates a dummy 128-dimensional embedding vector and saves it as input.json in the evaluation/ folder for use by benchmark tools.
   * [`post.lua`](./evaluation/post.lua)：Configures wrk to send a POST request with the contents of input.json to the FastAPI endpoint.
   * [`run_bench.sh`](./evaluation/run_bench.sh)：Runs an end-to-end benchmark suite. Triton perf_analyzer to measure queue vs. inference latency under concurrencies 1, 4, 8, 16. FastAPI wrk to measure throughput (requests/sec) and latency percentiles. GPU nvidia-smi snapshot of GPU utilization
+ 
+* Staging Deployment 
+
+  * [`register_model.py`](./evaluation/register_model.py)：Automatically registers the latest llara_model.pt from MLflow to the Model Registry.
+  * [`Dockerfile.staging`](./evaluation/Dockerfile.staging)：Builds a deployable Docker image with the inference API for Kubernetes.
+  * [`load_to_staging.sh`](./evaluation/load_to_staging.sh)：One-click pipeline to register model, build & push image, and update Helm for ArgoCD deployment.
 
 ##  CI/CD and Continuous Training (Unit 2/3 - Steven Wang)
 
