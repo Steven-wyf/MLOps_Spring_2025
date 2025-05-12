@@ -88,8 +88,8 @@ The [project proposal](./ProjectProposal.md) is located at the repo base directo
   * [`Matrix Factorization`](./train/matrix_factorization.py): The original plan is use `LightGCN` to generate user-behavior graphs to link each playlist id to the tracks they like. Due to the size of data and computing resouces, trainig of `LightGCN` would result in over 24 hour training so we switched to `Matrix Factorization`. The model would also be able to learn user behavior, instead of using 1-1 graph, but 1 -> matrix. This would significantly reduce the training time.
   * [`MLP Projector`](./train/mlp_train.py): The original plan is using `SR2LLM` as projector to align the embeddings from previous two models. However, due to the amount of data, we switched to a one-layer MLP projector in this part.
   * [`LLaRA`](./train/llara_train.py): The Linear layer with Regularization and Activation (LlaRA) is used as our final output model which would learn the user-behavior
-  * Inputs: Playlist (tracks), lyrics, artist names
-  * Outputs: Recommended next-track uri
+* Inputs: Playlist (tracks), lyrics, artist names
+* Outputs: Recommend the suggsted track uri
 * Traing and Re-training: The automation can triggered via 
   ```shell
   docker-compose docker-compose-training.yml -d up
