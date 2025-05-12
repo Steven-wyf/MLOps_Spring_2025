@@ -14,7 +14,7 @@ if not os.path.exists(pt_path):
     raise FileNotFoundError(pt_path)
 
 # 1) load checkpoint
-ckpt = torch.load(pt_path, map_location="cpu")
+ckpt = torch.load(pt_path, map_location="cpu", weights_only=False)
 in_dim   = ckpt["input_dim"]
 num_cls  = ckpt["num_classes"]
 hid_dim  = ckpt.get("hidden_dim", 512)
