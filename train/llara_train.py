@@ -133,7 +133,7 @@ def load_embeddings_from_mlflow() -> Dict[str, Any]:
                 dst_path=tmp_dir
             )
             
-            # 遍历每个 chunk 目录
+            # Iterate through each chunk directory
             found_files = False
             embeddings = None
             track_ids = None
@@ -142,7 +142,7 @@ def load_embeddings_from_mlflow() -> Dict[str, Any]:
                 if chunk_name.startswith('chunk_'):
                     chunk_path = os.path.join(chunk_dir, chunk_name)
                     if os.path.isdir(chunk_path):
-                        # 在 chunk 目录中查找 .npz 文件
+                        # Find .npz files in chunk directory
                         for file_name in os.listdir(chunk_path):
                             if file_name.endswith('.npz'):
                                 found_files = True
@@ -185,22 +185,22 @@ def load_playlist_data() -> pd.DataFrame:
 
 def create_training_pairs(df: pd.DataFrame, track_to_idx: Dict[str, int]) -> List[Tuple[int, int]]:
     """Create training pairs from playlist data"""
-    # 按播放列表ID分组，获取每个播放列表的歌曲列表
+    # Group by playlist ID, get song list for each playlist
     playlists = df.groupby('playlist_id')['track_uri'].apply(list)
     samples = []
     
-    # 遍历每个播放列表
+    # Iterate through each playlist
     for plist in playlists:
-        # 跳过长度小于2的播放列表
+        # Skip playlists with length less than 2
         if len(plist) < 2:
             continue
-        # 遍历播放列表中的每对相邻歌曲
+        # Iterate through each pair of adjacent songs in playlist
         for i in range(1, len(plist)):
-            context = plist[i - 1]  # 当前歌曲
-            target = plist[i]       # 下一首歌曲
-            # 确保两首歌曲都在 track mapping 中
+            context = plist[i - 1]  # Current song
+            target = plist[i]       # Next song
+            # Ensure both songs are in track mapping
             if context in track_to_idx and target in track_to_idx:
-                # 将 track URI 转换为索引，并添加到训练对中
+                # Convert track URI to index and add to training pairs
                 samples.append((track_to_idx[context], track_to_idx[target]))
     
     return samples
@@ -364,7 +364,7 @@ def main():
     # Create training pairs
     samples = create_training_pairs(df, uri_to_idx)
     
-    # 设置设备
+    # Set device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
     
@@ -372,13 +372,13 @@ def main():
     X = emb_data['embeddings'][[i for i, _ in samples]]  # 使用 track IDs 作为索引
     y = np.array([j for _, j in samples])
     
-    # 创建数据集和数据加载器
+    # Create data set and data loader
     dataset = TensorDataset(
         torch.FloatTensor(X),
         torch.LongTensor(y)
     )
     
-    # 使用较小的批次大小
+    # Use smaller batch size
     BATCH_SIZE = 1024
     train_loader = DataLoader(
         dataset,
@@ -390,7 +390,7 @@ def main():
     
     # Initialize model
     input_dim = X.shape[1]
-    output_dim = len(uri_to_idx)  # 输出维度是 track 的数量
+    output_dim = len(uri_to_idx)  # Output dimension is the number of tracks
     model = LlaRAClassifier(input_dim, output_dim, HIDDEN_DIM, DROPOUT)
     model.to(device)
     
@@ -414,7 +414,7 @@ def main():
             "num_samples": len(X)
         })
         
-        # 存储每个 epoch 的评估指标
+        # Store evaluation metrics for each epoch
         evaluation_metrics = {
             'epoch': [],
             'loss': [],
@@ -429,7 +429,7 @@ def main():
             epoch_loss = 0
             pbar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{epochs}")
             
-            # 训练阶段
+            # Training phase
             model.train()
             for batch_X, batch_y in pbar:
                 batch_X = batch_X.to(device)
@@ -446,7 +446,7 @@ def main():
             
             avg_loss = epoch_loss / len(train_loader)
             
-            # 评估阶段
+            # Evaluation phase
             model.eval()
             all_preds = []
             all_targets = []
@@ -459,13 +459,13 @@ def main():
                     all_preds.extend(preds.cpu().numpy())
                     all_targets.extend(batch_y.cpu().numpy())
             
-            # 计算评估指标
+            # Calculate evaluation metrics
             accuracy = accuracy_score(all_targets, all_preds)
             precision, recall, f1, _ = precision_recall_fscore_support(
                 all_targets, all_preds, average='macro'
             )
             
-            # 存储指标
+            # Store metrics
             evaluation_metrics['epoch'].append(epoch + 1)
             evaluation_metrics['loss'].append(avg_loss)
             evaluation_metrics['accuracy'].append(accuracy)
@@ -482,9 +482,9 @@ def main():
             
             logger.info(f"Epoch {epoch+1}: Loss = {avg_loss:.4f}, Accuracy = {accuracy:.4f}")
         
-        # 保存评估结果到 MinIO
+        # Save evaluation results to MinIO
         with tempfile.TemporaryDirectory() as tmp_dir:
-            # 保存模型
+            # Save model
             model_path = os.path.join(tmp_dir, "llara_model.pt")
             torch.save({
                 "model_state": model.state_dict(),
@@ -497,14 +497,14 @@ def main():
             mlflow.log_artifact(model_path, "models")
             logger.info(f"Model saved to MinIO through MLflow run {run.info.run_id}")
             
-            # 保存评估指标
+            # Save evaluation metrics
             metrics_path = os.path.join(tmp_dir, "evaluation_metrics.json")
             with open(metrics_path, 'w') as f:
                 json.dump(evaluation_metrics, f, indent=4)
             mlflow.log_artifact(metrics_path, "evaluation")
             logger.info("Evaluation metrics saved to MinIO")
             
-            # 保存 track mapping
+            # Save track mapping
             mapping_path = os.path.join(tmp_dir, "track_mapping.npz")
             np.savez(
                 mapping_path,

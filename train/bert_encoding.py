@@ -45,8 +45,8 @@ def save_mapping_to_minio(track_uris, track_ids, run_id):
     """Save track URI mapping to MinIO in chunks."""
     print("Starting to save track URI mapping...")
     
-    # 将映射分成较小的块
-    chunk_size = 10000  # 每个文件保存10000个映射
+    # Split mappings into smaller chunks
+    chunk_size = 10000  # Save 10000 mappings per file
     total_tracks = len(track_uris)
     num_chunks = (total_tracks + chunk_size - 1) // chunk_size
     
@@ -57,12 +57,12 @@ def save_mapping_to_minio(track_uris, track_ids, run_id):
             start_idx = i * chunk_size
             end_idx = min((i + 1) * chunk_size, total_tracks)
             
-            # 获取当前块的映射
+            # Get mappings for current chunk
             chunk_uris = track_uris[start_idx:end_idx]
             chunk_ids = track_ids[start_idx:end_idx]
             
             print(f"Saving chunk {i+1}/{num_chunks}...")
-            # 保存每个块到临时文件
+            # Save each chunk to temporary file
             temp_npz = os.path.join(tmp_dir, f"track_uri_mapping_chunk_{i}.npz")
             np.savez(
                 temp_npz,
@@ -73,19 +73,19 @@ def save_mapping_to_minio(track_uris, track_ids, run_id):
             )
             print(f"Saved chunk to {temp_npz}")
             
-            # 上传到 MinIO
+            # Upload to MinIO
             print(f"Uploading chunk {i+1} to MinIO...")
             try:
                 mlflow.log_artifact(temp_npz, f"mappings/chunk_{i}")
                 print(f"Successfully uploaded chunk {i+1}")
             except Exception as e:
                 print(f"Error uploading chunk {i+1}: {str(e)}")
-                # 如果上传失败，保存到本地
+                # If upload fails, save locally
                 backup_path = f"track_uri_mapping_chunk_{i}_backup.npz"
                 np.savez(backup_path, track_uris=chunk_uris, track_ids=chunk_ids)
                 print(f"Saved backup to {backup_path}")
         
-        # 保存映射信息
+        # Save mapping information
         info_path = os.path.join(tmp_dir, "mapping_info.npz")
         np.savez(
             info_path,
@@ -100,8 +100,8 @@ def save_embeddings_to_minio(embeddings_dict, run_id):
     """Save embeddings to MinIO using MLflow"""
     print("Starting to save embeddings...")
     
-    # 将 embeddings 分成较小的块
-    chunk_size = 1000  # 每个文件保存1000个embeddings
+    # Split embeddings into smaller chunks
+    chunk_size = 1000  # Save 1000 embeddings per file
     items = list(embeddings_dict.items())
     chunks = [dict(items[i:i + chunk_size]) for i in range(0, len(items), chunk_size)]
     
@@ -110,19 +110,19 @@ def save_embeddings_to_minio(embeddings_dict, run_id):
     with tempfile.TemporaryDirectory() as tmp_dir:
         for i, chunk in enumerate(chunks):
             print(f"Saving chunk {i+1}/{len(chunks)}...")
-            # 保存每个块到临时文件
+            # Save each chunk to temporary file
             temp_npz = os.path.join(tmp_dir, f"bert_track_embeddings_chunk_{i}.npz")
             np.savez(temp_npz, **chunk)
             print(f"Saved chunk to {temp_npz}")
             
-            # 上传到 MinIO
+            # Upload to MinIO
             print(f"Uploading chunk {i+1} to MinIO...")
             try:
                 mlflow.log_artifact(temp_npz, f"embeddings/chunk_{i}")
                 print(f"Successfully uploaded chunk {i+1}")
             except Exception as e:
                 print(f"Error uploading chunk {i+1}: {str(e)}")
-                # 如果上传失败，保存到本地
+                # If upload fails, save locally
                 backup_path = f"bert_track_embeddings_chunk_{i}_backup.npz"
                 np.savez(backup_path, **chunk)
                 print(f"Saved backup to {backup_path}")

@@ -116,7 +116,7 @@ def load_embeddings_from_mlflow() -> Dict[str, Any]:
             # Load embeddings
             data = np.load(embeddings_path)
             embeddings = data['item_embeddings']
-            track_ids = data['track_ids']  # 这些是 BERT 的索引
+            track_ids = data['track_ids']  # These are BERT indices
             
             logger.info(f"Successfully loaded {len(track_ids)} embeddings")
             
