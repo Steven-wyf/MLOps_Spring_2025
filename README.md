@@ -1,7 +1,7 @@
 # LLaRA++ — A Cold-Start Music Recommendation System
 
 ##  Value Proposition (Unit 1)
-The [project proposal](./ProjectProposal.md) is localed at the repo base directory.
+The [project proposal](./ProjectProposal.md) is located at the repo base directory.
 
 **Customer**: Music streaming platforms (e.g., Spotify) targeting new users with sparse interaction histories.
 
@@ -142,7 +142,7 @@ You can promote the model on ArgoCD Worflow, all GitOps update will be synced to
 | `train/`               | All training code: LightGCN, BERT, MLP, LLaRA      |
 | `inference/`           | FastAPI server, inference logic                    |
 | `evaluation/`          | Offline tests, metrics computation                 |
-| `experiment_tracking/` | MLflow + MinIO configuration                       |
+| `experiment_tracking/` | Deprecated:MLflow + MinIO configuration using Docker, left here just in case for complicated environment and manual deployment for experiment purposes                      |
 | `ansible/`             | Automation playbooks for platform & app deployment |
 | `k8s/`                 | Helm values and ArgoCD templates                   |
 | `tf/`                  | Terraform configuration for VMs, block storage     |
