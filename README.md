@@ -122,6 +122,23 @@ Future Optimization
 * Offline metrics: Accuracy of Llara, this data would be relative low due to cross examination so we bring in a frontend button to collect user feedback. The user can click if they like or dislike the suggestion. If they dislike the track suggested, the data will be stored as negative data for matrix factorization so we can use the data to re-train the model.
 * Online logging: API response latency, failure rates (FastAPI middleware)
 
+* Model optimization
+
+  * export_onnx.py:Load the llara_model.pt, reconstruct LlaRAClassifier, and export it as ONNX (llara_model.onnx) with dynamic batch support.
+  * prepare_data.py:Download embeddings and playlist data from MLflow, create context–target pairs, split into train/test sets, and save X_test.npy and y_test.npy under evaluation/outputs/llara/.
+  * benchmark_models.py:Benchmark the following model variants for file size, test accuracy, single-sample latency (median/95th), and batch throughput (FPS):Original PyTorch .pt model,Exported ONNX model,Graph-optimized ONNX (ORT_ENABLE_EXTENDED),Dynamic-quantized ONNX (QuantType.QInt8),Static-quantized ONNX. Also compare across providers: CPUExecutionProvider, CUDAExecutionProvider, TensorrtExecutionProvider, and OpenVINOExecutionProvider.
+
+* System‐Level Optimization
+
+  * gen_input.py:Generates a dummy 128-dimensional embedding vector and saves it as input.json in the evaluation/ folder for use by benchmark tools.
+  * post.lua:Configures wrk to send a POST request with the contents of input.json to the FastAPI endpoint.
+  * run_bensh.sh:Runs an end-to-end benchmark suite:Triton perf_analyzer to measure queue vs. inference latency under concurrencies 1, 4, 8, 16. FastAPI wrk to measure throughput (requests/sec) and latency percentiles. GPU nvidia-smi snapshot of GPU utilization.
+
+* Staging Deployment 
+
+  * register_model.py:Automatically registers the latest llara_model.pt from MLflow to the Model Registry.
+  * Dockerfile.staging:Builds a deployable Docker image with the inference API for Kubernetes.
+  * load_to_staging.sh:One-click pipeline to register model, build & push image, and update Helm for ArgoCD deployment.
 
 ##  CI/CD and Continuous Training (Unit 2/3 - Steven Wang)
 
