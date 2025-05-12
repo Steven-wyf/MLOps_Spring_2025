@@ -61,6 +61,7 @@ The [project proposal](./ProjectProposal.md) is located at the repo base directo
       ]
     }
     ```
+The processed training data is very large, so it located at `mnt/object/processed`.
 
 
 * **ETL and Pipeline**: Retrieve data from [Spotify](https://www.aicrowd.com/challenges/spotify-million-playlist-dataset-challenge)-> Extract → Clean → [Embed lyrics/title](./data_processing/data_preprocess.py) → [Text Embedding and Train](./train/)
