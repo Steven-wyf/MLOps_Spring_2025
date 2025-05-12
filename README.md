@@ -130,6 +130,19 @@ Future Optimization
 * The new data will be sent to the inference endpoint setup by FASTAPI and the inference node would pick up the file and re-format the data and put the data through MLP prjector and then LLaRA.
 
 ## Online Evaluation
+After staging validation, we conducted online evaluation in a canary environment to simulate real user behavior and monitor live model performance.
+
+* Setup Summary:
+
+  * Service: We deployed the full inference pipeline (BERT → MF → MLP → LLARA → [Triton optional]) as a FastAPI service at /predict.
+  * Monitoring: Integrated Prometheus and Grafana for real-time metrics (requests/sec, latency, etc.) via /metrics endpoint using prometheus-fastapi-instrumentator.
+  * Synthetic Users: Developed a script simulate_users.py to simulate users sending track-based recommendation requests sampled from example_tracks.json.
+  * User Behavior Plan:Sampled 1–3 tracks per request to mimic short vs. long playlist sessions.Varied request intervals (2s delay) and rounds to test both bursty and steady loads.Used realistic input text extracted from historic processed playlist data.
+
+* Scripts Developed:
+  
+  * [`gen_real_examples.py`](./evaluation/online_evaluation/gen_real_examples.py): Extracts realistic track texts from prior processed data.
+  * [`simulate_users.py`](./evaluation/online_evaluation/simulate_users.py): Sends randomized batches to /predict for online testing.
 
 ## CI/CD and continuous training
 You can promote the model on ArgoCD Worflow, all GitOps update will be synced to ArgoCD. If a re-train is required, the training docker can be setup using the `docker-compose` file in folder `/train`. 
