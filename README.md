@@ -124,21 +124,21 @@ Future Optimization
 
 * Model optimization
 
-  * export_onnx.py:Load the llara_model.pt, reconstruct LlaRAClassifier, and export it as ONNX (llara_model.onnx) with dynamic batch support.
-  * prepare_data.py:Download embeddings and playlist data from MLflow, create context–target pairs, split into train/test sets, and save X_test.npy and y_test.npy under evaluation/outputs/llara/.
-  * benchmark_models.py:Benchmark the following model variants for file size, test accuracy, single-sample latency (median/95th), and batch throughput (FPS):Original PyTorch .pt model,Exported ONNX model,Graph-optimized ONNX (ORT_ENABLE_EXTENDED),Dynamic-quantized ONNX (QuantType.QInt8),Static-quantized ONNX. Also compare across providers: CPUExecutionProvider, CUDAExecutionProvider, TensorrtExecutionProvider, and OpenVINOExecutionProvider.
+  * [export_onnx.py](./evaluation/export_onnx.py):Load the llara_model.pt, reconstruct LlaRAClassifier, and export it as ONNX (llara_model.onnx) with dynamic batch support.
+  * [prepare_data.py](./evaluation/prepare_data.py):Download embeddings and playlist data from MLflow, create context–target pairs, split into train/test sets, and save X_test.npy and y_test.npy under evaluation/outputs/llara/.
+  * [benchmark_models.py](./evaluation/benchmark_models.py):Benchmark the following model variants for file size, test accuracy, single-sample latency (median/95th), and batch throughput (FPS):Original PyTorch .pt model,Exported ONNX model,Graph-optimized ONNX (ORT_ENABLE_EXTENDED),Dynamic-quantized ONNX (QuantType.QInt8),Static-quantized ONNX. Also compare across providers: CPUExecutionProvider, CUDAExecutionProvider, TensorrtExecutionProvider, and OpenVINOExecutionProvider.
 
 * System‐Level Optimization
 
-  * gen_input.py:Generates a dummy 128-dimensional embedding vector and saves it as input.json in the evaluation/ folder for use by benchmark tools.
-  * post.lua:Configures wrk to send a POST request with the contents of input.json to the FastAPI endpoint.
-  * run_bensh.sh:Runs an end-to-end benchmark suite:Triton perf_analyzer to measure queue vs. inference latency under concurrencies 1, 4, 8, 16. FastAPI wrk to measure throughput (requests/sec) and latency percentiles. GPU nvidia-smi snapshot of GPU utilization.
+  * [gen_input.py](./evaluation/gen_input.py):Generates a dummy 128-dimensional embedding vector and saves it as input.json in the evaluation/ folder for use by benchmark tools.
+  * [post.lua](./evaluation/post.lua):Configures wrk to send a POST request with the contents of input.json to the FastAPI endpoint.
+  * [run_bensh.sh](./evaluation/run_bensh.sh):Runs an end-to-end benchmark suite:Triton perf_analyzer to measure queue vs. inference latency under concurrencies 1, 4, 8, 16. FastAPI wrk to measure throughput (requests/sec) and latency percentiles. GPU nvidia-smi snapshot of GPU utilization.
 
 * Staging Deployment 
 
-  * register_model.py:Automatically registers the latest llara_model.pt from MLflow to the Model Registry.
-  * Dockerfile.staging:Builds a deployable Docker image with the inference API for Kubernetes.
-  * load_to_staging.sh:One-click pipeline to register model, build & push image, and update Helm for ArgoCD deployment.
+  * [register_model.py](./evaluation/register_model.py):Automatically registers the latest llara_model.pt from MLflow to the Model Registry.
+  * [Dockerfile.staging](./evaluation/Dockerfile.staging):Builds a deployable Docker image with the inference API for Kubernetes.
+  * [load_to_staging.sh](./evaluation/load_to_staging.sh):One-click pipeline to register model, build & push image, and update Helm for ArgoCD deployment.
 
 ##  CI/CD and Continuous Training (Unit 2/3 - Steven Wang)
 
@@ -150,7 +150,6 @@ Future Optimization
 * Infrastructure as Code using Terraform, Kubernetes manifests, and Ansible playbooks.
 * Multi-stage deployment pipeline with automated model promotion based on MLflow metrics.
 * Integrated monitoring and logging with Prometheus and Grafana for real-time insights.
-* Rollback capabilities for failed deployments to ensure system stability.
 
 ##  Online Inference Data
 
