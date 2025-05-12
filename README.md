@@ -11,7 +11,7 @@ The [project proposal](./ProjectProposal.md) is located at the repo base directo
 
 * **Dataset**: 1M playlists (≈20GB), >2M unique tracks.
 * **Model size**: Final LLaRA model ≈ 1.3 GB + MLP Projector ≈ 500 MB.
-* **Deployment**: Up to 1K inference requests/hour in demo.
+* **Deployment**: Up to 1K inference requests/hour.
 
 ##  Cloud-Native Infrastructure (Unit 2/3 - Steven Wang)
 
