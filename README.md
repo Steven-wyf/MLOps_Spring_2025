@@ -125,7 +125,7 @@ Future Optimization
 
   * [`gen_input.py`](./evaluation/gen_input.py)：Generates a dummy 128-dimensional embedding vector and saves it as input.json in the evaluation/ folder for use by benchmark tools.
   * [`post.lua`](./evaluation/post.lua)：Configures wrk to send a POST request with the contents of input.json to the FastAPI endpoint.
-  * [`run_bench.sh`](./evaluation/run_bench.sh)：Runs an end-to-end benchmark suite. Triton perf_analyzer to measure queue vs. inference latency under concurrencies 1, 4, 8, 16. FastAPI wrk to measure throughput (requests/sec) and latency percentiles. GPU nvidia-smi snapshot of GPU utilization
+  * [`run_bensh.sh`](./evaluation/run_bensh.sh)：Runs an end-to-end benchmark suite. Triton perf_analyzer to measure queue vs. inference latency under concurrencies 1, 4, 8, 16. FastAPI wrk to measure throughput (requests/sec) and latency percentiles. GPU nvidia-smi snapshot of GPU utilization
  
 * Staging Deployment 
 
