@@ -115,6 +115,12 @@ Future Optimization
 * Offline metrics: Accuracy of Llara, this data would be relative low due to cross examination so we bring in a frontend button to collect user feedback. The user can click if they like or dislike the suggestion. If they dislike the track suggested, the data will be stored as negative data for matrix factorization so we can use the data to re-train the model.
 * Online logging: API response latency, failure rates (FastAPI middleware)
 
+* Model optimizations
+
+  * [`export_onnx.py`](./evaluation/export_onnx.py):Load the llara_model.pt, reconstruct LlaRAClassifier, and export it as ONNX (llara_model.onnx) with dynamic batch support.
+  * [`prepare_data.py`](./evaluation/prepare_data.py):Download embeddings and playlist data from MLflow, create context–target pairs, split into train/test sets, and save X_test.npy and y_test.npy under evaluation/outputs/llara/
+  * [`benchmark_models.py`](./evaluation/benchmark_models.py)：Benchmark the following model variants for file size, test accuracy, single-sample latency (median/95th), and batch throughput (FPS): Original PyTorch .pt model, Exported ONNX model,Graph-optimized ONNX (ORT_ENABLE_EXTENDED),Dynamic-quantized ONNX (QuantType.QInt8),Static-quantized ONNX. Also compare across providers: CPUExecutionProvider, CUDAExecutionProvider, TensorrtExecutionProvider, and OpenVINOExecutionProvider.
+
 
 ##  CI/CD and Continuous Training (Unit 2/3 - Steven Wang)
 
