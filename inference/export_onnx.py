@@ -20,15 +20,23 @@ mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
 run_id = get_latest_run_id("llara-classifier")
 print(f"Exporting ONNX from MLflow run {run_id}")
 
-# 3) Download exactly the llara_model.pt artifact
 with tempfile.TemporaryDirectory() as tmp:
-    pt_path = mlflow.artifacts.download_artifacts(
+    # 只指定到 models 目录
+    local_models_dir = mlflow.artifacts.download_artifacts(
         run_id=run_id,
-        artifact_path="models/llara_model.pt",
+        artifact_path="models",
         dst_path=tmp
     )
+    # local_models_dir = /tmp/tmpXXXX/models
+    print("Downloaded to:", local_models_dir)
+    print("Contents:", os.listdir(local_models_dir))
+    
+    # 构造 .pt 文件的完整路径
+    pt_path = os.path.join(local_models_dir, "llara_model.pt")
+    if not os.path.exists(pt_path):
+        raise FileNotFoundError(f"{pt_path} not found after download")
 
-    # 4) Load checkpoint
+    # 加载 checkpoint
     ckpt = torch.load(pt_path, map_location="cpu")
     input_dim   = ckpt["input_dim"]
     num_classes = ckpt["num_classes"]
@@ -36,28 +44,22 @@ with tempfile.TemporaryDirectory() as tmp:
     dropout     = ckpt.get("dropout", 0.3)
     state_dict  = ckpt["model_state"]
 
-    # 5) Reconstruct model and load weights
+    # 重建模型并 load
     model = LlaRAClassifier(input_dim, num_classes, hidden_dim, dropout)
     model.load_state_dict(state_dict)
     model.eval()
 
-    # 6) Export to ONNX
+    # 导出 ONNX
     onnx_dir = os.path.abspath("models/music_rec/1")
     os.makedirs(onnx_dir, exist_ok=True)
     onnx_path = os.path.join(onnx_dir, "model.onnx")
 
     dummy = torch.randn(1, input_dim)
     torch.onnx.export(
-        model,
-        dummy,
-        onnx_path,
+        model, dummy, onnx_path,
         input_names=["input_embeddings"],
         output_names=["scores"],
         opset_version=13,
-        dynamic_axes={
-            "input_embeddings": {0: "batch"},
-            "scores":           {0: "batch"}
-        }
+        dynamic_axes={"input_embeddings": {0: "batch"}, "scores": {0: "batch"}}
     )
-
-    print(f"ONNX model successfully saved to {onnx_path}")
+    print(f"✅ ONNX model saved to {onnx_path}")
