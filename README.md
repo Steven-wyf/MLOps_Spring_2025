@@ -138,7 +138,7 @@ Future Optimization
   * Synthetic Users: Developed a script simulate_users.py to simulate users sending track-based recommendation requests sampled from example_tracks.json.
   * User Behavior Plan: Sampled 1–3 tracks per request to mimic short vs. long playlist sessions. Varied request intervals (2s delay) and rounds to test both bursty and steady loads. Used realistic input text extracted from historic processed playlist data.
 
-* [`Scripts Developed`](./evaluation/online_evaluation):
+* [`Scripts Developed`](./evaluation/):
 
   * gen_real_examples.py: Extracts realistic track texts from prior processed data.
   * simulate_users.py: Sends randomized batches to /predict for online testing.
