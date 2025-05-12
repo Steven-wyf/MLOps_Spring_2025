@@ -103,7 +103,7 @@ The [project proposal](./ProjectProposal.md) is localed at the repo base directo
 
 ##  Model Serving (Unit 6/7 - Siqi Xu)
 * API in [`inference/inference_api.py`](./inference/inference_api.py)
-* Served with FastAPI + Docker Compose: [`docker-compose-inference.yml`](./inference/docker-compose-inference.yml) (Note: The system is supposed to be used by business, the inference front-end is just for demo, you can directly use [`docker-compose-inference-batch.yml`](./inference/docker-compose-inference-backend.yml))
+* Served with FastAPI + Docker Compose: [`docker-compose-inference.yml`](./inference/docker-compose-inference.yml)
 * Input: `{ "tracks": [ {"track_name": ..., "artist_name": ... }, ... ] }`
 * Output: `{ "recommended_tracks": [...] }`
 
@@ -148,36 +148,5 @@ The [project proposal](./ProjectProposal.md) is localed at the repo base directo
 | `ansible/`             | Automation playbooks for platform & app deployment |
 | `k8s/`                 | Helm values and ArgoCD templates                   |
 | `tf/`                  | Terraform configuration for VMs, block storage     |
-
----
-
-##  Run the System on Chameleon
-
-```bash
-# Mount volumes (rclone/block)
-# Provision infra:
-cd tf/kvm
-terraform init && terraform apply
-
-# Run platform deployment:
-cd ../ansible
-ansible-playbook -i inventory.yml argocd/argocd_add_platform.yml
-
-# Start MLflow + MinIO:
-kubectl port-forward svc/mlflow 5000:5000 -n mlops-platform &
-kubectl port-forward svc/minio 9000:9000 -n mlops-platform &
-
-# Run training:
-cd ../train
-docker-compose -f docker-compose-training.yml up
-
-# Build + push model:
-cd ../workflows
-argo submit --from workflowtemplate/train-model -p model-version=0
-
-# Serve API:
-cd ../inference
-docker-compose -f docker-compose-inference.yml up
-```
 
 ---
