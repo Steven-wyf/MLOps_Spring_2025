@@ -12,6 +12,7 @@
       - deploy-container-image.yaml
       - promote-model.yaml
       - train-model.yaml
+      - loadtest.yaml  # Add the new loadtest workflow
 
   tasks:
     - name: Clone or update mlops-iac repo
