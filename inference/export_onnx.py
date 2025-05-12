@@ -2,6 +2,11 @@
 # inference/export_onnx.py
 
 import os
+
+# 指定 MLflow artifact store（MinIO）的 endpoint 和凭证
+os.environ["MLFLOW_S3_ENDPOINT_URL"] = "http://129.114.25.37:9000"
+os.environ["AWS_ACCESS_KEY_ID"]      = "admin"
+os.environ["AWS_SECRET_ACCESS_KEY"]  = "hrwbqzUS85G253yKi43T"
 import mlflow
 import torch
 import tempfile
