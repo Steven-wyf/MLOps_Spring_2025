@@ -42,13 +42,6 @@ The [project proposal](./ProjectProposal.md) is located at the repo base directo
   cd /mnt/object/MLOps_Spring_2025/ansible
   ansible-playbook -i inventory.yml argocd/argocd_add_platform.yml
 
-### Infrastructure and Deployment Architecture (Steven Wang):
-* Designed and implemented a complete CI/CD pipeline using GitHub Actions, enabling seamless integration and deployment workflows.
-* Provisioned cloud resources with Terraform and configured Kubernetes deployments using Helm and ArgoCD for GitOps-based management.
-* Established a multi-stage deployment pipeline (Dev → Staging → Prod) with automated model promotion based on MLflow metrics.
-* Containerized services with Docker and docker-compose for consistent and portable environments.
-* Integrated MLflow and MinIO for efficient model artifact storage and retrieval, ensuring reproducibility and traceability.
-* Set up robust monitoring and logging infrastructure using Prometheus and Grafana for real-time observability and performance tracking.
 
 ##  Persistent Storage + Data (Unit 8 - Data Person: Yufei Wang)
   * Persistant Stoarge: `/mnt/object/`, mounted to the container on CHI@TACC, named mlops_project9_persistant
