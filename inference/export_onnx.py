@@ -5,8 +5,13 @@ import os
 import mlflow
 import torch
 import tempfile
-from llara_train import LlaRAClassifier, get_latest_run_id
+import sys
 
+proj_root = os.path.abspath(os.path.join(__file__, "..", ".."))
+if proj_root not in sys.path:
+    sys.path.insert(0, proj_root)
+
+from train.llara_train import LlaRAClassifier, get_latest_run_id
 # 1) Configure MLflow
 MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "http://129.114.25.37:8000/")
 mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
