@@ -1,4 +1,4 @@
-# MLOps_Spring_2025 Project Proposal: LLaRA++ — A cold-start music recommendation system that integrates behavior and text
+# MLOps_Spring_2025 Project Proposal: LLaRA++ — A music recommendation system that integrates behavior and text
 
 ## LLaRA++: Beyond Language Modeling — Hybrid Embedding and User-Aware Curriculum for Cold-Start Music Recommendation
 LLaRA++ is a cold-start music recommendation system that unifies graph-based collaborative filtering (LightGCN) and text-based embeddings (BERT/DistilBERT) to address minimal interaction data. An MLP projector (SR2LLM) aligns LightGCN embeddings into a language model space, enabling LLaRA with curriculum prompt tuning for enhanced predictions. Deployed via ONNX QInt8 quantization in a FastAPI service and orchestrated by a CI/CD pipeline, LLaRA++ offers scalable, low-latency inference. Its primary users are music streaming platforms and ML teams seeking advanced yet practical solutions to cold-start problems.
@@ -7,7 +7,7 @@ LLaRA++ is a cold-start music recommendation system that unifies graph-based col
 | Name             | Responsible for                                      | Link to their commits in this repo             |
 |------------------|-------------------------------------------------------|------------------------------------------------|
 | All team members | Overall system design, integration, and documentation |       |
-| Muyuan Zhang        | Model training (LightGCN, Projector, LLaRA)           |  |
+| Muyuan Zhang        | Model training (Matrix Factorization, MLP Projector, LLaRA)           |  |
 | Siqi Xu       | Model quantization, FastAPI deployment & monitoring   |  |
 | Yufei Wang         | Data preprocessing, lyric/title embedding, cold start |  |
 | Steven Wang       | CI/CD, pipeline integration, dashboard                |  |
