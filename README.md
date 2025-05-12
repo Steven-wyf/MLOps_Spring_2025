@@ -132,17 +132,16 @@ Future Optimization
 ## Online Evaluation (Unit 7 - Siqi Xu)
 
 * Setup Summary:
- * Service: We deployed the full inference pipeline (BERT → MF → MLP → LLARA → [Triton optional]) as a FastAPI service at /predict.
- * Monitoring: Integrated Prometheus and Grafana for real-time metrics (requests/sec, latency, etc.) via /metrics endpoint using prometheus-fastapi-instrumentator.
- * Synthetic Users: Developed a script simulate_users.py to simulate users sending track-based recommendation requests sampled from example_tracks.json.
- * User Behavior Plan:
-Sampled 1–3 tracks per request to mimic short vs. long playlist sessions.
-Varied request intervals (2s delay) and rounds to test both bursty and steady loads.
-Used realistic input text extracted from historic processed playlist data.
 
-* Scripts Developed:
-[`gen_real_examples.py`](./evaluation/online evaluation/gen_real_examples.py): Extracts realistic track texts from prior processed data.
-[`simulate_users.py`](./evaluation/online evaluation/simulate_users.py): Sends randomized batches to /predict for online testing.
+  * Service: We deployed the full inference pipeline (BERT → MF → MLP → LLARA → [Triton optional]) as a FastAPI service at /predict.
+  * Monitoring: Integrated Prometheus and Grafana for real-time metrics (requests/sec, latency, etc.) via /metrics endpoint using prometheus-fastapi-instrumentator.
+  * Synthetic Users: Developed a script simulate_users.py to simulate users sending track-based recommendation requests sampled from example_tracks.json.
+  * User Behavior Plan: Sampled 1–3 tracks per request to mimic short vs. long playlist sessions. Varied request intervals (2s delay) and rounds to test both bursty and steady loads. Used realistic input text extracted from historic processed playlist data.
+
+* [`Scripts Developed`](./evaluation/online_evaluation):
+
+  * gen_real_examples.py: Extracts realistic track texts from prior processed data.
+  * simulate_users.py: Sends randomized batches to /predict for online testing.
 
 ## CI/CD and continuous training
 You can promote the model on ArgoCD Worflow, all GitOps update will be synced to ArgoCD. If a re-train is required, the training docker can be setup using the `docker-compose` file in folder `/train`. 
