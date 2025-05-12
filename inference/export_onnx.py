@@ -1,56 +1,40 @@
 #!/usr/bin/env python3
-# inference/export_onnx.py
+# inference/export_onnx_local.py
 
-import os
-import sys
-import torch
-import mlflow
-from mlflow.tracking import MlflowClient
+import os, sys, torch
 
-# —— 如果你的 MLflow Server 配置了 Artifact HTTP 代理，确保先设 URI —— 
-mlflow.set_tracking_uri("http://129.114.25.37:8000/")
-
-# —— 为了能 import 你们的训练脚本，插入项目根到 sys.path —— 
+# 确保能 import 到你的模型定义
 proj_root = os.path.abspath(os.path.join(__file__, "..", ".."))
 if proj_root not in sys.path:
     sys.path.insert(0, proj_root)
-from train.llara_train import get_latest_run_id
+from train.llara_train import LlaRAClassifier
 
-# 1) 找到最新 Run
-run_id = get_latest_run_id("llara-classifier")
-print(f"🔍 Loading LLaRA model from MLflow run {run_id}")
+pt_path = "models/music_rec/1/llara_model.pt"
+if not os.path.exists(pt_path):
+    raise FileNotFoundError(pt_path)
 
-# 2) 用 PyTorch Flavor 接口加载模型  
-#    model_uri 的格式是 "runs:/<run_id>/<artifact_path_without_suffix>"
-#    训练时你是 mlflow.log_artifact(model_path, "models"),
-#    那么这里就是 "models/llara_model"
-model_uri = f"runs:/{run_id}/models/llara_model"
-model = mlflow.pytorch.load_model(model_uri)
+# 1) load checkpoint
+ckpt = torch.load(pt_path, map_location="cpu")
+in_dim   = ckpt["input_dim"]
+num_cls  = ckpt["num_classes"]
+hid_dim  = ckpt.get("hidden_dim", 512)
+drop     = ckpt.get("dropout", 0.3)
+state    = ckpt["model_state"]
+
+# 2) rebuild model
+model = LlaRAClassifier(in_dim, num_cls, hid_dim, drop)
+model.load_state_dict(state)
 model.eval()
-print("✅ Model loaded:", model)
 
-# 3) 从模型结构里自动推断 input_dim（取第一个 Linear 层的输入维度）
-first_linear = next(m for m in model.modules() if isinstance(m, torch.nn.Linear))
-input_dim = first_linear.in_features
-print(f"ℹ️  Detected input_dim = {input_dim}")
-
-# 4) 导出成 ONNX
-out_dir = os.path.abspath("models/music_rec/1")
-os.makedirs(out_dir, exist_ok=True)
+# 3) export ONNX
+out_dir = os.path.dirname(pt_path)
 onnx_path = os.path.join(out_dir, "model.onnx")
-
-# 构造一个 dummy 输入
-dummy_input = torch.randn(1, input_dim)
+dummy = torch.randn(1, in_dim)
 torch.onnx.export(
-    model,
-    dummy_input,
-    onnx_path,
+    model, dummy, onnx_path,
     input_names=["input_embeddings"],
     output_names=["scores"],
     opset_version=13,
-    dynamic_axes={
-        "input_embeddings": {0: "batch"},
-        "scores":           {0: "batch"},
-    },
+    dynamic_axes={"input_embeddings":{0:"batch"}, "scores":{0:"batch"}},
 )
-print(f"✅ ONNX model saved to {onnx_path}")
+print(f"✅ ONNX saved to {onnx_path}")
