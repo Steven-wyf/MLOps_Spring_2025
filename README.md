@@ -11,7 +11,7 @@ The [project proposal](./ProjectProposal.md) is located at the repo base directo
 
 * **Dataset**: 1M playlists (≈20GB), >2M unique tracks.
 * **Model size**: Final LLaRA model ≈ 1.3 GB + MLP Projector ≈ 500 MB.
-* **Deployment**: Up to 1K inference requests/hour in demo.
+* **Deployment**: Up to 1K inference requests/hour.
 
 ##  Cloud-Native Infrastructure (Unit 2/3 - Steven Wang)
 
@@ -41,6 +41,14 @@ The [project proposal](./ProjectProposal.md) is located at the repo base directo
   # Platform installation, this would bring up MLFlow, MinIO, Postgres
   cd /mnt/object/MLOps_Spring_2025/ansible
   ansible-playbook -i inventory.yml argocd/argocd_add_platform.yml
+
+### Infrastructure and Deployment Architecture (Steven Wang):
+* Designed and implemented a complete CI/CD pipeline using GitHub Actions, enabling seamless integration and deployment workflows.
+* Provisioned cloud resources with Terraform and configured Kubernetes deployments using Helm and ArgoCD for GitOps-based management.
+* Established a multi-stage deployment pipeline (Dev → Staging → Prod) with automated model promotion based on MLflow metrics.
+* Containerized services with Docker and docker-compose for consistent and portable environments.
+* Integrated MLflow and MinIO for efficient model artifact storage and retrieval, ensuring reproducibility and traceability.
+* Set up robust monitoring and logging infrastructure using Prometheus and Grafana for real-time observability and performance tracking.
 
 ##  Persistent Storage + Data (Unit 8 - Data Person: Yufei Wang)
   * Persistant Stoarge: `/mnt/object/`, mounted to the container on CHI@TACC, named mlops_project9_persistant
@@ -107,10 +115,16 @@ The [project proposal](./ProjectProposal.md) is located at the repo base directo
 * Input: `{ "tracks": [ {"track_name": ..., "artist_name": ... }, ... ] }`
 * Output: `{ "recommended_tracks": [...] }`
 
+### Inference Pipeline (Steven Wang's Contributions):
+* Designed and implemented FastAPI-based model serving architecture to handle real-time inference requests efficiently.
+* Integrated MLflow model registry for versioned model loading, ensuring that the correct model version is always deployed.
+* Implemented model pipeline orchestration (BERT → MF → MLP → LLARA) to streamline the inference process and improve response times.
+* Set up containerized inference service with Docker Compose for easy deployment and scalability.
+* Added monitoring and logging capabilities using Prometheus and Grafana to track API performance, latency, and failure rates.
+
 Future Optimization
 * Quantized to ONNX QInt8 (see `evaluation/templates`)
 * Offline evaluation: [`evaluation`](./evaluation) folder
-
 
 * Offline metrics: Accuracy of Llara, this data would be relative low due to cross examination so we bring in a frontend button to collect user feedback. The user can click if they like or dislike the suggestion. If they dislike the track suggested, the data will be stored as negative data for matrix factorization so we can use the data to re-train the model.
 * Online logging: API response latency, failure rates (FastAPI middleware)
@@ -136,11 +150,14 @@ Future Optimization
 ##  CI/CD and Continuous Training (Unit 2/3 - Steven Wang)
 
 * Infrastructure as Code: [`tf/`](./tf), [`k8s/`](./k8s), [`ansible/`](./ansible)
-* GitHub Actions trigger training/deployment (see CI script)
+* GitHub Actions trigger training, testing, and deployment workflows.
 * Model promotion:
-
   * Train → Staging → Canary → Production (ArgoCD apps)
-  * Use MLflow metrics to auto-promote
+  * Use MLflow metrics to auto-promote.
+* Infrastructure as Code using Terraform, Kubernetes manifests, and Ansible playbooks.
+* Multi-stage deployment pipeline with automated model promotion based on MLflow metrics.
+* Integrated monitoring and logging with Prometheus and Grafana for real-time insights.
+* Rollback capabilities for failed deployments to ensure system stability.
 
 ##  Online Inference Data
 
@@ -151,10 +168,10 @@ After staging validation, we conducted online evaluation in a canary environment
 
 * Setup Summary:
 
-  * Service: We deployed the full inference pipeline (BERT → MF → MLP → LLARA → [Triton optional]) as a FastAPI service at /predict.
-  * Monitoring: Integrated Prometheus and Grafana for real-time metrics (requests/sec, latency, etc.) via /metrics endpoint using prometheus-fastapi-instrumentator.
-  * Synthetic Users: Developed a script simulate_users.py to simulate users sending track-based recommendation requests sampled from example_tracks.json.
-  * User Behavior Plan:Sampled 1–3 tracks per request to mimic short vs. long playlist sessions.Varied request intervals (2s delay) and rounds to test both bursty and steady loads.Used realistic input text extracted from historic processed playlist data.
+  * Service: The project will deploy the full inference pipeline (BERT → MF → MLP → LLARA → [Triton optional]) as a FastAPI service at /predict.
+  * Monitoring: Integrate Prometheus and Grafana for real-time metrics (see inference [dockerfile](./inference/docker-compose-inference.yml))(requests/sec, latency, etc.) via /metrics endpoint using prometheus-fastapi-instrumentator.
+  * Synthetic Users: Developed a script [simulate_users.py](./evaluation/online_evaluation/) to simulate users sending track-based recommendation requests sampled from example_tracks.json.
+  * User Behavior Plan: Sampled 1–3 tracks per request to mimic short vs. long playlist sessions.Varied request intervals (2s delay) and rounds to test both bursty and steady loads.Used realistic input text extracted from historic processed playlist data.
 
 * Scripts Developed:
   
