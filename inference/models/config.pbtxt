@@ -1,0 +1,28 @@
+name: "music_rec"
+backend: "onnxruntime"
+max_batch_size: 16
+
+input [
+  {
+    name: "input_embeddings" 
+    data_type: TYPE_FP32
+    dims: [128]                
+  }
+]
+
+output [
+  {
+    name: "scores"         
+    data_type: TYPE_FP32
+    dims: [100]                
+  }
+]
+
+instance_group [
+  { count: 1 kind: KIND_GPU gpus: [0] }
+]
+
+dynamic_batching {
+  preferred_batch_size: [4, 8, 16]
+  max_queue_delay_microseconds: 100
+}

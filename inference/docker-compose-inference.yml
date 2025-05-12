@@ -10,6 +10,8 @@ services:
       - "8080:8080"
     volumes:
       - /mnt/object:/mnt/object
+      # Mount the model for use by Triton
+      - ./models/music_rec:/models/music_rec:ro
     networks:
       - mlops-network
     environment:
@@ -19,7 +21,58 @@ services:
       - AWS_SECRET_ACCESS_KEY=hrwbqzUS85G253yKi43T
       - AWS_DEFAULT_REGION=us-east-1
       - S3_ENDPOINT_URL=http://129.114.25.37:9000
+      - TRITON_SERVER_URL=http://triton:8000
+      - USE_TRITON=true
+    depends_on:
+      - triton
 
+  # === 2) Triton Inference Server ===
+  triton:
+    image: nvcr.io/nvidia/tritonserver:24.03-py3
+    container_name: triton
+    runtime: nvidia
+    command: >
+      tritonserver
+        --model-repository=/models
+        --log-verbose=1
+    environment:
+
+      - NVIDIA_VISIBLE_DEVICES=0
+    ports:
+      - "8003:8000"   # Triton HTTP
+      - "8004:8001"   # Triton gRPC
+      - "8005:8002"   # Triton Metrics
+    volumes:
+      - ./models/music_rec:/models/music_rec
+      - ./evaluation:/evaluation:ro
+    networks:
+      - mlops-network
+
+  prometheus:
+    image: prom/prometheus
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    networks:
+      - mlops-network
+
+  grafana:
+    image: grafana/grafana
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-storage:/var/lib/grafana
+    depends_on:
+      - prometheus
+    networks:
+      - mlops-network
+  
 networks:
   mlops-network:
     external: true 
+
+volumes:
+  grafana-storage:
