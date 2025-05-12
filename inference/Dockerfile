@@ -26,6 +26,7 @@ VOLUME ["/mnt/object"]
 
 # Copy all necessary files
 COPY inference/inference_api.py .
+COPY inference/static ./static
 COPY data_processing/data_preprocess.py ./data_processing/
 COPY inference/templates ./templates/
 
@@ -42,3 +43,6 @@ USER mlops
 
 # Default command with host set to 0.0.0.0 to allow external access
 CMD ["uvicorn", "inference_api:app", "--host", "0.0.0.0", "--port", "8080", "--workers", "4"] 
+
+# preload the model into the image
+RUN python -c "from transformers import DistilBertTokenizer; DistilBertTokenizer.from_pretrained('distilbert-base-uncased')"

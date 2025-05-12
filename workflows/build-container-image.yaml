@@ -1,57 +1,57 @@
 apiVersion: argoproj.io/v1alpha1
 kind: WorkflowTemplate
 metadata:
-  name: build-container-image
+  name: build-container-image  # Name of the WorkflowTemplate
 spec:
-  entrypoint: kaniko-build-flow
+  entrypoint: kaniko-build-flow  # The main entrypoint for the workflow
   arguments:
     parameters:
-    - name: model-version
+    - name: model-version  # Parameter to specify the model version
 
   volumeClaimTemplates:
   - metadata:
-      name: workdir
+      name: workdir  # Persistent volume claim for sharing data between steps
     spec:
-      accessModes: [ "ReadWriteOnce" ]
+      accessModes: [ "ReadWriteOnce" ]  # Access mode for the volume
       resources:
         requests:
-          storage: 2Gi
+          storage: 2Gi  # Request 2Gi of storage space
 
   templates:
-  - name: kaniko-build-flow
+  - name: kaniko-build-flow  # Main workflow template
     steps:
-      - - name: clone-repo
+      - - name: clone-repo  # Step 1: Clone the repository
           template: git-clone
-      - - name: fetch-model
+      - - name: fetch-model  # Step 2: Download the model from MLflow
           template: download-model
           arguments:
             parameters:
             - name: model-version
-              value: "{{workflow.parameters.model-version}}"
-      - - name: kaniko-build
+              value: "{{workflow.parameters.model-version}}"  # Pass the model version parameter
+      - - name: kaniko-build  # Step 3: Build the container image using Kaniko
           template: kaniko
           arguments:
             parameters:
             - name: model-version
-              value: "{{workflow.parameters.model-version}}"
-      - - name: tag-model-staging
+              value: "{{workflow.parameters.model-version}}"  # Pass the model version parameter
+      - - name: tag-model-staging  # Step 4: Set the MLflow model alias to "staging"
           template: set-mlflow-alias
           arguments:
             parameters:
             - name: model-version
-              value: "{{workflow.parameters.model-version}}"
-      - - name: deploy-to-staging
+              value: "{{workflow.parameters.model-version}}"  # Pass the model version parameter
+      - - name: deploy-to-staging  # Step 5: Trigger deployment to the staging environment
           template: trigger-deploy
           arguments:
             parameters:
             - name: model-version
-              value: "{{workflow.parameters.model-version}}"
+              value: "{{workflow.parameters.model-version}}"  # Pass the model version parameter
             - name: environment
-              value: "staging"
+              value: "staging"  # Specify the deployment environment as "staging"
 
-  - name: git-clone
+  - name: git-clone  # Template for cloning the repository
     container:
-      image: alpine/git
+      image: alpine/git  # Use the alpine/git image
       command: [sh, -c]
       args:
         - |
@@ -71,20 +71,20 @@ spec:
             exit 1
           fi
       volumeMounts:
-      - name: workdir
+      - name: workdir  # Mount the persistent volume to /mnt/workspace
         mountPath: /mnt/workspace
 
-  - name: download-model
+  - name: download-model  # Template for downloading the model from MLflow
     inputs:
       parameters:
-      - name: model-version
+      - name: model-version  # Accept the model version parameter
     container:
-      image: python:3.11-slim
+      image: python:3.11-slim  # Use the Python 3.11 slim image
       command: [sh, -c]
       args:
         - |
-          pip install mlflow-skinny
-          export MLFLOW_TRACKING_URI=http://mlflow.mlops-platform.svc.cluster.local:8000
+          pip install mlflow-skinny  # Install the lightweight MLflow client
+          export MLFLOW_TRACKING_URI=http://mlflow.mlops-platform.svc.cluster.local:8000  # Set the MLflow tracking URI
           mkdir -p /tmp/mlflow_model
 
           echo "Downloading MLflow model artifacts..."
@@ -99,60 +99,60 @@ spec:
           fi
 
           echo "Copying model.pth to app/ as food11.pth..."
-          cp "$FOUND" /mnt/workspace/food11.pth
-          echo "1.0.{{inputs.parameters.model-version}}" > /mnt/workspace/versions.txt
+          cp "$FOUND" /mnt/workspace/food11.pth  # Copy the model file to the workspace
+          echo "1.0.{{inputs.parameters.model-version}}" > /mnt/workspace/versions.txt  # Save the version information
       volumeMounts:
-      - name: workdir
+      - name: workdir  # Mount the persistent volume to /mnt/workspace
         mountPath: /mnt/workspace
 
-  - name: kaniko
+  - name: kaniko  # Template for building the container image using Kaniko
     inputs:
       parameters:
-      - name: model-version
+      - name: model-version  # Accept the model version parameter
     container:
-      image: gcr.io/kaniko-project/executor:latest
+      image: gcr.io/kaniko-project/executor:latest  # Use the Kaniko executor image
       resources:
         requests:
-          memory: "1500Mi"
+          memory: "1500Mi"  # Request 1500Mi of memory
       args:
-        - --dockerfile=/mnt/workspace/Dockerfile
-        - --context=/mnt/workspace
-        - --destination=registry.kube-system.svc.cluster.local:5000/mlops-app:staging-1.0.{{inputs.parameters.model-version}}
-        - --insecure
+        - --dockerfile=/mnt/workspace/Dockerfile  # Specify the Dockerfile path
+        - --context=/mnt/workspace  # Specify the build context path
+        - --destination=registry.kube-system.svc.cluster.local:5000/mlops-app:staging-1.0.{{inputs.parameters.model-version}}  # Push the image to the container registry
+        - --insecure  # Allow insecure connections to the registry
       volumeMounts:
-      - name: workdir
+      - name: workdir  # Mount the persistent volume to /mnt/workspace
         mountPath: /mnt/workspace
 
-  - name: set-mlflow-alias
+  - name: set-mlflow-alias  # Template for setting the MLflow model alias
     inputs:
       parameters:
-      - name: model-version
+      - name: model-version  # Accept the model version parameter
     script:
-      image: python:3.11-slim
+      image: python:3.11-slim  # Use the Python 3.11 slim image
       command: [sh, -c]
       source: |
-        pip install mlflow-skinny > /dev/null
-        export MLFLOW_TRACKING_URI=http://mlflow.mlops-platform.svc.cluster.local:8000
-        python -c "import mlflow; client = mlflow.tracking.MlflowClient(); client.set_registered_model_alias(name='GourmetGramFood11Model', alias='staging', version='{{inputs.parameters.model-version}}')"
+        pip install mlflow-skinny > /dev/null  # Install the lightweight MLflow client
+        export MLFLOW_TRACKING_URI=http://mlflow.mlops-platform.svc.cluster.local:8000  # Set the MLflow tracking URI
+        python -c "import mlflow; client = mlflow.tracking.MlflowClient(); client.set_registered_model_alias(name='GourmetGramFood11Model', alias='staging', version='{{inputs.parameters.model-version}}')"  # Set the model alias to "staging"
   
-  - name: trigger-deploy
+  - name: trigger-deploy  # Template for triggering the deployment workflow
     inputs:
       parameters:
-      - name: model-version
-      - name: environment
+      - name: model-version  # Accept the model version parameter
+      - name: environment  # Accept the deployment environment parameter
     resource:
-      action: create
+      action: create  # Create a new Argo Workflow
       manifest: |
         apiVersion: argoproj.io/v1alpha1
         kind: Workflow
         metadata:
-          generateName: deploy-container-image-
+          generateName: deploy-container-image-  # Generate a name for the deployment workflow
         spec:
           workflowTemplateRef:
-            name: deploy-container-image
+            name: deploy-container-image  # Reference the "deploy-container-image" WorkflowTemplate
           arguments:
             parameters:
             - name: environment
-              value: "{{inputs.parameters.environment}}"
+              value: "{{inputs.parameters.environment}}"  # Pass the deployment environment parameter
             - name: model-version
-              value: "{{inputs.parameters.model-version}}"
+              value: "{{inputs.parameters.model-version}}"  # Pass the model version parameter
