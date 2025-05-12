@@ -103,18 +103,18 @@ The processed training data is very large, so it located at `mnt/object/processe
 * Experiment tracking: [`mlflow`](http://129.114.25.37:8000)
 * Experiment artifacts: The model, embedding, mapping, and logs all store at [`minIO`](http://129.114.25.37:9000)
 
-##  Model Serving (Unit 6/7 - Siqi Xu)
-* API in [`inference/inference_api.py`](./inference/inference_api.py)
-* Served with FastAPI + Docker Compose: [`docker-compose-inference.yml`](./inference/docker-compose-inference.yml)
-* Input: `{ "tracks": [ {"track_name": ..., "artist_name": ... }, ... ] }`
-* Output: `{ "recommended_tracks": [...] }`
-
-### Inference Pipeline (Steven Wang's Contributions):
+## Inference Pipeline (Steven Wang's Contributions):
 * Designed and implemented [FastAPI-based model](./inference/inference_api.py) serving architecture to handle real-time inference requests efficiently.
 * Integrated MLflow model registry for versioned model loading, ensuring that the correct model version is always deployed.
 * Implemented [model pipeline](./inference/inference_api.py) orchestration (BERT → MF → MLP → LLARA) to streamline the inference process and improve response times.
 * Set up [containerized inference service](./inference/inference_api.py) with Docker Compose for easy deployment and scalability.
 * Added monitoring and logging capabilities using Prometheus and Grafana to track API performance, latency, and failure rates.
+
+##  Model Serving (Unit 6/7 - Siqi Xu)
+* API in [`inference/inference_api.py`](./inference/inference_api.py)
+* Served with FastAPI + Docker Compose: [`docker-compose-inference.yml`](./inference/docker-compose-inference.yml)
+* Input: `{ "tracks": [ {"track_name": ..., "artist_name": ... }, ... ] }`
+* Output: `{ "recommended_tracks": [...] }`
 
 Future Optimization
 * Quantized to ONNX QInt8 (see `evaluation/templates`)
