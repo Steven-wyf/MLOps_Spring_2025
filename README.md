@@ -89,7 +89,7 @@ The [project proposal](./ProjectProposal.md) is located at the repo base directo
   * [`LLaRA`](./train/llara_train.py): The Linear layer with Regularization and Activation (LlaRA) is used as our final output model which would learn the user-behavior
   * Inputs: Playlist (tracks), lyrics, artist names
   * Outputs: Recommended next-track uri
-* Traing and Re-training: The automation can triggere via 
+* Traing and Re-training: The automation can triggered via 
   ```shell
   docker-compose docker-compose-training.yml -d up
   ```
@@ -97,7 +97,7 @@ The [project proposal](./ProjectProposal.md) is located at the repo base directo
   ```shell
   python3 ./xxxx.py
   ```
-  However, the system design means the model ouput is sequential, you cannot just retrain any part expect `Llara` alone.
+  However, the system design means the models ouput are sequential, especially the output of `DistilBERT` and  `Matrix Factorization` is highly correlated with track id. **DO NOT** retrain any part expect `Llara` alone.
 * Experiment tracking: [`mlflow`](http://129.114.25.37:8000)
 * Experiment artifacts: The model, embedding, mapping, and logs all store at [`minIO`](http://129.114.25.37:9000)
 
