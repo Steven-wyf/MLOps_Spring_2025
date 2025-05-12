@@ -21,10 +21,10 @@
 
 ##  Persistent Storage + Data (Unit 8 - Data Person: Yufei Wang)
 
-* **Storage**: `/mnt/object/MLOps_Spring_2025`
+### **Storage**: `/mnt/object/`, mounted to the container on CHI@TACC, named mlops_project9_persistant
 
-  * `data_processing/`: raw and preprocessed data scripts
-  * `references/`: lyrics, genre metadata
+  * [`data_processing/`](https://github.com/Steven-wyf/MLOps_Spring_2025/tree/main/data_processing): raw and preprocessed data scripts, dataset overview and inspection script
+
   * `experiment_tracking/`: MLflow + artifacts
 
 * **Training Data**: [`data_processing/`](./data_processing)
@@ -52,7 +52,7 @@
 * Models:
 
   * [`train/llara_train.py`](./train/llara_train.py) for full training
-  * LightGCN: `matrix_factorization.py`
+  * Matrix_factorazation: `matrix_factorization.py`
   * MLP Projector: `mlp_train.py`
 * Re-training done via `docker-compose-training.yml`
 * Experiment tracking: [`mlflow`](http://129.114.25.37:5000)
