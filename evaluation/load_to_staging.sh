@@ -8,10 +8,10 @@ IMAGE_TAG="staging-$(date +%Y%m%d%H%M%S)"
 HELM_VALUES="k8s/staging/values.yaml"
 
 echo "[1/4] Registering existing model..."
-python3 train/register_model.py
+python3 evaluation/register_model.py
 
 echo "[2/4] Building Docker image..."
-docker build -t ${IMAGE_REPO}:${IMAGE_TAG} -f inference/Dockerfile.staging inference/
+docker build -t ${IMAGE_REPO}:${IMAGE_TAG} -f evaluation/Dockerfile.staging inference/
 
 echo "[3/4] Pushing Docker image..."
 docker push ${IMAGE_REPO}:${IMAGE_TAG}

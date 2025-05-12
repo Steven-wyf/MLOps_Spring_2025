@@ -6,7 +6,7 @@ import random
 import requests
 
 FASTAPI_URL = os.getenv("FASTAPI_URL", "http://localhost:8080/predict")
-EXAMPLE_PATH = "inference/evaluation/example_tracks.json"
+EXAMPLE_PATH = "evaluation/online_evaluation/example_tracks.json"
 
 with open(EXAMPLE_PATH, "r", encoding="utf-8") as f:
     EXAMPLE_TRACKS = json.load(f)

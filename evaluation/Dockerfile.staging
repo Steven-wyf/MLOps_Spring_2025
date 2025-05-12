@@ -1,0 +1,22 @@
+# evaluation/Dockerfile.staging
+
+# Use a minimal Python base image
+FROM python:3.10-slim
+
+# Set working directory inside the container
+WORKDIR /app
+
+# Install Python dependencies from inference
+COPY inference/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Optional: Set environment variables for your inference API
+ENV MLFLOW_TRACKING_URI=http://129.114.25.37:8000
+ENV USE_TRITON=true
+
+# Copy the entire inference directory contents
+COPY inference/ .
+
+# Run the inference API with uvicorn
+# IMPORTANT: adjust filename if your app is not called inference_api.py
+CMD ["uvicorn", "inference_api:app", "--host", "0.0.0.0", "--port", "8000"]
