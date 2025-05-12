@@ -3,7 +3,7 @@ from pathlib import Path
 from sklearn.model_selection import train_test_split
 
 # Reuse the llara_train.py data-loading functions
-from llara_train import (
+from train.llara_train import (
     load_embeddings_from_mlflow,
     load_playlist_data,
     create_training_pairs
