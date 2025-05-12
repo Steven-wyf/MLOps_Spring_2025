@@ -42,6 +42,14 @@ The [project proposal](./ProjectProposal.md) is located at the repo base directo
   cd /mnt/object/MLOps_Spring_2025/ansible
   ansible-playbook -i inventory.yml argocd/argocd_add_platform.yml
 
+### Infrastructure and Deployment Architecture (Steven Wang):
+* Designed and implemented a complete CI/CD pipeline using GitHub Actions, enabling seamless integration and deployment workflows.
+* Provisioned cloud resources with Terraform and configured Kubernetes deployments using Helm and ArgoCD for GitOps-based management.
+* Established a multi-stage deployment pipeline (Dev → Staging → Prod) with automated model promotion based on MLflow metrics.
+* Containerized services with Docker and docker-compose for consistent and portable environments.
+* Integrated MLflow and MinIO for efficient model artifact storage and retrieval, ensuring reproducibility and traceability.
+* Set up robust monitoring and logging infrastructure using Prometheus and Grafana for real-time observability and performance tracking.
+
 ##  Persistent Storage + Data (Unit 8 - Data Person: Yufei Wang)
   * Persistant Stoarge: `/mnt/object/`, mounted to the container on CHI@TACC, named mlops_project9_persistant
 
@@ -107,10 +115,16 @@ The [project proposal](./ProjectProposal.md) is located at the repo base directo
 * Input: `{ "tracks": [ {"track_name": ..., "artist_name": ... }, ... ] }`
 * Output: `{ "recommended_tracks": [...] }`
 
+### Inference Pipeline (Steven Wang's Contributions):
+* Designed and implemented FastAPI-based model serving architecture to handle real-time inference requests efficiently.
+* Integrated MLflow model registry for versioned model loading, ensuring that the correct model version is always deployed.
+* Implemented model pipeline orchestration (BERT → MF → MLP → LLARA) to streamline the inference process and improve response times.
+* Set up containerized inference service with Docker Compose for easy deployment and scalability.
+* Added monitoring and logging capabilities using Prometheus and Grafana to track API performance, latency, and failure rates.
+
 Future Optimization
 * Quantized to ONNX QInt8 (see `evaluation/templates`)
 * Offline evaluation: [`evaluation`](./evaluation) folder
-
 
 * Offline metrics: Accuracy of Llara, this data would be relative low due to cross examination so we bring in a frontend button to collect user feedback. The user can click if they like or dislike the suggestion. If they dislike the track suggested, the data will be stored as negative data for matrix factorization so we can use the data to re-train the model.
 * Online logging: API response latency, failure rates (FastAPI middleware)
@@ -119,11 +133,14 @@ Future Optimization
 ##  CI/CD and Continuous Training (Unit 2/3 - Steven Wang)
 
 * Infrastructure as Code: [`tf/`](./tf), [`k8s/`](./k8s), [`ansible/`](./ansible)
-* GitHub Actions trigger training/deployment (see CI script)
+* GitHub Actions trigger training, testing, and deployment workflows.
 * Model promotion:
-
   * Train → Staging → Canary → Production (ArgoCD apps)
-  * Use MLflow metrics to auto-promote
+  * Use MLflow metrics to auto-promote.
+* Infrastructure as Code using Terraform, Kubernetes manifests, and Ansible playbooks.
+* Multi-stage deployment pipeline with automated model promotion based on MLflow metrics.
+* Integrated monitoring and logging with Prometheus and Grafana for real-time insights.
+* Rollback capabilities for failed deployments to ensure system stability.
 
 ##  Online Inference Data
 
