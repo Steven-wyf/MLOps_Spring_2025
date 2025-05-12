@@ -4,7 +4,8 @@ import random
 import os
 
 TRACK_TEXT_PATH = "/mnt/block/processed/track_texts.json"
-OUTPUT_PATH = "inference/evaluation/example_tracks.json"
+OUTPUT_PATH = "evaluation/online_evaluation/example_tracks.json"
+
 
 def generate_example_samples(n=20):
     with open(TRACK_TEXT_PATH, "r", encoding="utf-8") as f:
