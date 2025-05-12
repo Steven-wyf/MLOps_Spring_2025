@@ -121,6 +121,11 @@ Future Optimization
   * [`prepare_data.py`](./evaluation/prepare_data.py):Download embeddings and playlist data from MLflow, create context–target pairs, split into train/test sets, and save X_test.npy and y_test.npy under evaluation/outputs/llara/
   * [`benchmark_models.py`](./evaluation/benchmark_models.py)：Benchmark the following model variants for file size, test accuracy, single-sample latency (median/95th), and batch throughput (FPS): Original PyTorch .pt model, Exported ONNX model,Graph-optimized ONNX (ORT_ENABLE_EXTENDED),Dynamic-quantized ONNX (QuantType.QInt8),Static-quantized ONNX. Also compare across providers: CPUExecutionProvider, CUDAExecutionProvider, TensorrtExecutionProvider, and OpenVINOExecutionProvider.
 
+* System optimizations
+
+  * [`gen_input.py`](./evaluation/gen_input.py)：Generates a dummy 128-dimensional embedding vector and saves it as input.json in the evaluation/ folder for use by benchmark tools.
+  * [`post.lua`](./evaluation/post.lua)：Configures wrk to send a POST request with the contents of input.json to the FastAPI endpoint.
+  * [`run_bench.sh`](./evaluation/run_bench.sh)：Runs an end-to-end benchmark suite. Triton perf_analyzer to measure queue vs. inference latency under concurrencies 1, 4, 8, 16. FastAPI wrk to measure throughput (requests/sec) and latency percentiles. GPU nvidia-smi snapshot of GPU utilization
 
 ##  CI/CD and Continuous Training (Unit 2/3 - Steven Wang)
 
