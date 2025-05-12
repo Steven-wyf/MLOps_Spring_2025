@@ -134,10 +134,10 @@ After staging validation, we conducted online evaluation in a canary environment
 
 * Setup Summary:
 
-  * Service: We deployed the full inference pipeline (BERT → MF → MLP → LLARA → [Triton optional]) as a FastAPI service at /predict.
-  * Monitoring: Integrated Prometheus and Grafana for real-time metrics (requests/sec, latency, etc.) via /metrics endpoint using prometheus-fastapi-instrumentator.
-  * Synthetic Users: Developed a script simulate_users.py to simulate users sending track-based recommendation requests sampled from example_tracks.json.
-  * User Behavior Plan:Sampled 1–3 tracks per request to mimic short vs. long playlist sessions.Varied request intervals (2s delay) and rounds to test both bursty and steady loads.Used realistic input text extracted from historic processed playlist data.
+  * Service: The project will deploy the full inference pipeline (BERT → MF → MLP → LLARA → [Triton optional]) as a FastAPI service at /predict.
+  * Monitoring: Integrate Prometheus and Grafana for real-time metrics (see inference [dockerfile](./inference/docker-compose-inference.yml))(requests/sec, latency, etc.) via /metrics endpoint using prometheus-fastapi-instrumentator.
+  * Synthetic Users: Developed a script [simulate_users.py](./evaluation/online_evaluation/) to simulate users sending track-based recommendation requests sampled from example_tracks.json.
+  * User Behavior Plan: Sampled 1–3 tracks per request to mimic short vs. long playlist sessions.Varied request intervals (2s delay) and rounds to test both bursty and steady loads.Used realistic input text extracted from historic processed playlist data.
 
 * Scripts Developed:
   
